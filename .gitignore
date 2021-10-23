@@ -1,0 +1,17 @@
+node_modules
+#build
+*.log
+*.tmp
+
+.cache
+.idea
+lib
+jsdocs
+*.DS_Store
+dist
+
+build
+
+static/player*.html
+static/index.html
+static/getDynamicAssetList.php
