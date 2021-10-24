@@ -22,8 +22,6 @@ export default class TechnopolisComm extends BaseComm
             };
         });
         return results || [];
-        //const rawResults:any = JSON.parse(data.substring(16, data.length -2));
-        //return rawResults.items.map((item:any) => {return { price:item.p, name:item.l, provider:"Technopolis"}});
     }
 
 
@@ -33,5 +31,6 @@ export default class TechnopolisComm extends BaseComm
         searchString +
         "&query_autocomplete=&search_main_category=ALL";
     }
+
 
 }
