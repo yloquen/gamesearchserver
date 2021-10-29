@@ -1,4 +1,5 @@
 import {GameData} from "./types";
+import Util from "./Util";
 
 const https = require("https");
 
@@ -11,33 +12,17 @@ export default class BaseComm
         return new Promise<GameData[]>((resolve, reject) =>
         {
             const url = this.generateUrl(searchString);
-            https.get(url,
-                (resp:any) =>
-                {
-                    let data = '';
-
-                    resp.on('data', (chunk:any) =>
-                    {
-                        data += chunk;
-                    });
-
-                    resp.on('end', () =>
-                    {
-                        resolve(this.parseResults(data));
-                    });
-
-                })
-                .on("error", (err:Error) =>
-                {
-                    console.log("Error: " + err.message);
-                });
+            Util.loadUrlToBuffer(url).then((data:Buffer) =>
+            {
+                this.parseResults(String(data)).then(data => { resolve(data) });
+            });
         });
     }
 
 
-    parseResults(data:string):GameData[]
+    parseResults(data:string):Promise<GameData[]>
     {
-        return [];
+        return Promise.resolve([]);
     }
 
 

@@ -1,16 +1,44 @@
 import {GameData} from "./types";
 import BaseComm from "./BaseComm";
+import Util from "./Util";
+import {Buffer} from "buffer";
 const http = require("http");
 const https = require("https");
+const sharp = require("sharp");
 
 export default class OzoneComm extends BaseComm
 {
 
 
-    parseResults(data:string)
+    parseResults(data:string):Promise<GameData[]>
     {
         const rawResults:any = JSON.parse(data.substring(16, data.length -2));
-        return rawResults.items.map((item:any) => {return { price:Number(item.p), name:item.l, provider:"Ozone"}});
+
+        const promises:Promise<GameData>[] = rawResults.items.map((item:any) =>
+        {
+            return new Promise<GameData>((resolve, reject) =>
+            {
+                Util.loadUrlToBuffer(item.t2).then((result:Buffer) =>
+                {
+                    sharp(result)
+                        .resize(100, 100, {fit:'contain', background:{r:255, g:255, b:255, alpha:1}})
+                        .toBuffer()
+                        .then((data:any) =>
+                    {
+                        resolve(
+                            {
+                                link:item.u,
+                                img:data.toString("base64"),
+                                price:Number(item.p),
+                                name:item.l,
+                                provider:"Ozone"
+                            });
+                    });
+                });
+            });
+        });
+
+        return Promise.all(promises);
     }
 
 

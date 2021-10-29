@@ -4,24 +4,45 @@ const http = require("http");
 const https = require("https");
 
 import { parse } from 'node-html-parser';
+import Util from "./Util";
+import {Buffer} from "buffer";
+const sharp = require("sharp");
 
 export default class TechnopolisComm extends BaseComm
 {
 
 
-    parseResults(data:string)
+    parseResults(data:string):Promise<GameData[]>
     {
+        const baseUrl = "https://www.technopolis.bg";
         const root = parse(data);
         const list = root.querySelector(".products-grid-list")?.querySelectorAll(".list-item");
-        const results = list?.map(li =>
+
+        const promises:Promise<GameData>[] = list?.map(li =>
         {
-            return {
-                name:li.querySelector(".modal-header")?.childNodes[1]?.childNodes[0]?.rawText || "",
-                price:Number(li.querySelector(".price-value")?.childNodes[0]?.rawText),
-                provider:"Technopolis"
-            };
-        });
-        return results || [];
+            return new Promise<GameData>((resolve, reject) =>
+            {
+                const imgUrl = baseUrl + (li.querySelector(".lazyload")?.getAttribute("data-src") || "");
+                Util.loadUrlToBuffer(imgUrl).then((result:Buffer) =>
+                {
+                    sharp(result)
+                        .resize(100, 100, {fit:'contain', background:{r:255, g:255, b:255, alpha:1}})
+                        .toBuffer().then((data:any) =>
+                    {
+                        resolve(
+                            {
+                                name:li.querySelector(".modal-header")?.querySelector("strong")?.rawText || "",
+                                price:Number(li.querySelector(".price-value")?.rawText),
+                                provider:"Technopolis",
+                                img:data.toString("base64"),
+                                link:baseUrl + (li.querySelector(".preview")?.querySelector("a")?.getAttribute("data-src") || "")
+                            });
+                    });
+                });
+            });
+        }) || [];
+
+        return Promise.all(promises);
     }
 
 

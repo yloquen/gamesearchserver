@@ -1,5 +1,5 @@
 import BaseComm from "./BaseComm";
-import { GameData } from "./types";
+import {GameData} from "./types";
 import OzoneComm from "./OzoneComm";
 import TechnopolisComm from "./TechnopolisComm";
 
@@ -17,17 +17,23 @@ function onRequest(request:any, response:any)
     ];
 
     const queryObject = url.parse(request.url, true).query;
+    const queryString = queryObject.q.toLocaleLowerCase();
 
     const promises:Promise<GameData[]>[] = c.map(comm =>
     {
-        return comm.getData(queryObject.q);
+        return comm.getData(queryString);
     });
 
     Promise.all(promises).then((values)=>
     {
         response.setHeader('Content-Type', 'application/json');
         response.setHeader('Access-Control-Allow-Origin', '*');
-        response.write(JSON.stringify(values.flat()));
+        const searchResults = values.flat();
+        const filteredResults = searchResults.filter((result:GameData) =>
+        {
+            return result.name.toLocaleLowerCase().indexOf(queryString) !== -1;
+        });
+        response.write(JSON.stringify(filteredResults));
         response.end();
     });
 
