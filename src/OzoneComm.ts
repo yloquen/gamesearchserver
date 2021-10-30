@@ -18,7 +18,7 @@ export default class OzoneComm extends BaseComm
         {
             return new Promise<GameData>((resolve, reject) =>
             {
-                Util.loadUrlToBuffer(item.t2).then((result:Buffer) =>
+                Util.loadUrlToBuffer(item.t).then((result:Buffer) =>
                 {
                     sharp(result)
                         .resize(100, 100, {fit:'contain', background:{r:255, g:255, b:255, alpha:1}})
