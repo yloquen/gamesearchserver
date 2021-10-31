@@ -14,13 +14,19 @@ export default class BaseComm
             const url = this.generateUrl(searchString);
             Util.loadUrlToBuffer(url).then((data:Buffer) =>
             {
-                this.parseResults(String(data)).then(data => { resolve(data) });
+                this.parseResults(String(data), searchString).then(data => { resolve(data) });
             });
         });
     }
 
 
-    parseResults(data:string):Promise<GameData[]>
+    filterFunc()
+    {
+        return true;
+    }
+
+
+    parseResults(data:string, query:string):Promise<GameData[]>
     {
         return Promise.resolve([]);
     }

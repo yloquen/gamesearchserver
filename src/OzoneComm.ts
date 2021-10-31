@@ -2,44 +2,48 @@ import {GameData} from "./types";
 import BaseComm from "./BaseComm";
 import Util from "./Util";
 import {Buffer} from "buffer";
-const http = require("http");
-const https = require("https");
+
 const sharp = require("sharp");
+const crypto = require("crypto");
+const fs = require("fs");
 
 export default class OzoneComm extends BaseComm
 {
 
 
-    parseResults(data:string):Promise<GameData[]>
+    parseResults(data:string, query:string):Promise<GameData[]>
     {
         const rawResults:any = JSON.parse(data.substring(16, data.length -2));
-
-        const promises:Promise<GameData>[] = rawResults.items.map((item:any) =>
-        {
-            return new Promise<GameData>((resolve, reject) =>
+        const promises:Promise<GameData>[] = rawResults.items
+            .filter((item:any) =>
             {
-                Util.loadUrlToBuffer(item.t).then((result:Buffer) =>
+                const name = item.l;
+                return name.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) !== -1;
+            })
+            .map((item:any) =>
+            {
+                return new Promise<GameData>((resolve, reject) =>
                 {
-                    sharp(result)
-                        .resize(100, 100, {fit:'contain', background:{r:255, g:255, b:255, alpha:1}})
-                        .toBuffer()
-                        .then((data:any) =>
-                    {
-                        resolve(
-                            {
+                    Util.getBase64Image(item.t)
+                        .then((fileName:string) =>
+                        {
+                            resolve({
                                 link:item.u,
-                                img:data.toString("base64"),
+                                img:"http://localhost/" + fileName,
                                 price:Number(item.p),
                                 name:item.l,
                                 provider:"Ozone"
                             });
-                    });
+                        });
                 });
             });
-        });
 
         return Promise.all(promises);
     }
+
+
+
+
 
 
     generateUrl(searchString:string)

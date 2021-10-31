@@ -1,6 +1,10 @@
 import {GameData} from "./types";
 import {Buffer} from "buffer";
+
 const https = require("https");
+const crypto = require("crypto");
+const fs = require("fs");
+const sharp = require("sharp");
 
 export default class Util
 {
@@ -32,6 +36,54 @@ export default class Util
                     console.log("Error loading " + url + "\n" + err.message);
                 });
         });
+    }
+
+
+    public static getBase64Image(url:string):Promise<string>
+    {
+        return new Promise<string>((resolve, reject) =>
+        {
+            const shaHash = crypto.createHash("sha256").update(url).digest("hex");
+            const fileName = shaHash + ".png";
+            const filePath = "./cache/" + fileName;
+
+            fs.promises.access(filePath, fs.F_OK)
+                .then(()=>
+                {
+                    console.log("File " + fileName + " is cached");
+                    resolve(fileName);
+                })
+                .catch(() =>
+                {
+                    console.log("Fetching " + fileName);
+                    Util.loadUrlToBuffer(url)
+                        .then((result:Buffer) =>
+                        {
+                            return sharp(result)
+                                .resize(160, 160, {fit:'contain', background:{r:255, g:255, b:255, alpha:1}})
+                                .png()
+                                .toBuffer();
+                        })
+                        .then((b:Buffer) =>
+                        {
+
+                            fs.writeFile(filePath, b,
+                                ()=>
+                                {
+                                    resolve(fileName);
+                                });
+                        });
+                });
+        });
+
+
+
+
+
+
+
+
+
     }
 
 }

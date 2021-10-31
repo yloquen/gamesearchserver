@@ -17,7 +17,7 @@ function onRequest(request:any, response:any)
     ];
 
     const queryObject = url.parse(request.url, true).query;
-    const queryString = queryObject.q.toLocaleLowerCase();
+    const queryString = queryObject.q.toLowerCase();
 
     const promises:Promise<GameData[]>[] = c.map(comm =>
     {
@@ -28,12 +28,10 @@ function onRequest(request:any, response:any)
     {
         response.setHeader('Content-Type', 'application/json');
         response.setHeader('Access-Control-Allow-Origin', '*');
-        const searchResults = values.flat();
-        const filteredResults = searchResults.filter((result:GameData) =>
-        {
-            return result.name.toLocaleLowerCase().indexOf(queryString) !== -1;
-        });
-        response.write(JSON.stringify(filteredResults));
+
+        const searchResults:GameData[] = values.flat();
+
+        response.write(JSON.stringify(searchResults));
         response.end();
     });
 

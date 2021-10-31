@@ -12,35 +12,36 @@ export default class TechnopolisComm extends BaseComm
 {
 
 
-    parseResults(data:string):Promise<GameData[]>
+    parseResults(data:string, query:string):Promise<GameData[]>
     {
         const baseUrl = "https://www.technopolis.bg";
         const root = parse(data);
         const list = root.querySelector(".products-grid-list")?.querySelectorAll(".list-item");
 
-        const promises:Promise<GameData>[] = list?.map(li =>
-        {
-            return new Promise<GameData>((resolve, reject) =>
+        const promises:Promise<GameData>[] =
+            list?.filter((li:any) =>
             {
-                const imgUrl = baseUrl + (li.querySelector(".lazyload")?.getAttribute("data-src") || "");
-                Util.loadUrlToBuffer(imgUrl).then((result:Buffer) =>
+                const name = li.querySelector(".modal-header")?.querySelector("strong")?.rawText || "";
+                return name.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) !== -1;
+            })
+            .map(li =>
+            {
+                return new Promise<GameData>((resolve, reject) =>
                 {
-                    sharp(result)
-                        .resize(100, 100, {fit:'contain', background:{r:255, g:255, b:255, alpha:1}})
-                        .toBuffer().then((data:any) =>
-                    {
-                        resolve(
-                            {
+                    const imgUrl = baseUrl + (li.querySelector(".lazyload")?.getAttribute("data-src") || "");
+                    Util.getBase64Image(imgUrl)
+                        .then((fileName:string) =>
+                        {
+                            resolve({
                                 name:li.querySelector(".modal-header")?.querySelector("strong")?.rawText || "",
                                 price:Number(li.querySelector(".price-value")?.rawText),
                                 provider:"Technopolis",
-                                img:data.toString("base64"),
+                                img:"http://localhost/" + fileName,
                                 link:baseUrl + (li.querySelector(".preview")?.querySelector("a")?.getAttribute("data-src") || "")
                             });
-                    });
+                        });
                 });
-            });
-        }) || [];
+            }) || [];
 
         return Promise.all(promises);
     }
