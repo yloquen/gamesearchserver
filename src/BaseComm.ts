@@ -20,12 +20,6 @@ export default class BaseComm
     }
 
 
-    filterFunc()
-    {
-        return true;
-    }
-
-
     parseResults(data:string, query:string):Promise<GameData[]>
     {
         return Promise.resolve([]);

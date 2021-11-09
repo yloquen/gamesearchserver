@@ -17,8 +17,7 @@ export default class OzoneComm extends BaseComm
         const promises:Promise<GameData>[] = rawResults.items
             .filter((item:any) =>
             {
-                const name = item.l;
-                return name.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) !== -1;
+                return Util.filterFullyContained(item.l, query);
             })
             .map((item:any) =>
             {

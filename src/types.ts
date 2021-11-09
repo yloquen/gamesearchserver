@@ -6,3 +6,9 @@ export type GameData =
     link:string,
     img:string
 };
+
+export type PriceData =
+{
+    name:string,
+    price:string
+};

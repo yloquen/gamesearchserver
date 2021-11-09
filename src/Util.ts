@@ -75,15 +75,32 @@ export default class Util
                         });
                 });
         });
-
-
-
-
-
-
-
-
-
     }
+
+
+    static toSearchWords(s:string):string[]
+    {
+        return s.toLocaleLowerCase().replace(/[^a-zа-я0-9]/g, " ").replace(/\s+/g, " ").split(" ");
+    }
+
+
+    // Returns true only if all words in query are contained in name
+    static filterFullyContained(name:string, query:string)
+    {
+        const nameWords = Util.toSearchWords(name);
+        const queryWords = Util.toSearchWords(query);
+
+        for (let wordIdx = 0; wordIdx < queryWords.length; wordIdx++)
+        {
+            const word = queryWords[wordIdx];
+            if (nameWords.indexOf(word) === -1)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
 
 }

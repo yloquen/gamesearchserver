@@ -22,7 +22,7 @@ export default class TechnopolisComm extends BaseComm
             list?.filter((li:any) =>
             {
                 const name = li.querySelector(".modal-header")?.querySelector("strong")?.rawText || "";
-                return name.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) !== -1;
+                return Util.filterFullyContained(name, query);
             })
             .map(li =>
             {
