@@ -1,10 +1,11 @@
 import BaseComm from "./BaseComm";
-import {GameData, PriceData} from "./types";
+import {GameData} from "./types";
 import OzoneComm from "./OzoneComm";
 import TechnopolisComm from "./TechnopolisComm";
 import Util from "./Util";
 import {parse} from "node-html-parser";
 import {decode} from "html-entities";
+import HTMLElement from "node-html-parser/dist/nodes/html";
 
 const http = require('http');
 const url = require('url');
@@ -20,18 +21,25 @@ function onRequest(request:any, response:any)
     ];
 
     const queryObject = url.parse(request.url, true).query;
+
+    if (!queryObject.q)
+    {
+        response.end();
+        return
+    }
+
     const queryString = queryObject.q.toLowerCase();
 
-    const promises:Promise<GameData[]>[] = communicators.map(comm =>
+    const commPromises:Promise<GameData[]>[] = communicators.map(comm =>
     {
         return comm.getData(queryString);
     });
 
     const searchWords = Util.toSearchWords(queryString);
 
-    const p = new Promise<PriceData[]>(resolve =>
+    const priceChartingPromise = new Promise<GameData[]>(resolve =>
     {
-        const results:PriceData[] = [];
+        const results:GameData[] = [];
         const url = "https://www.pricecharting.com/search-products?q=" + searchWords.join("+")  + "+PAL&type=prices";
         return Util.loadUrlToBuffer(url)
             .then((data:Buffer) =>
@@ -40,42 +48,60 @@ function onRequest(request:any, response:any)
                 const gamesData = root.querySelectorAll("#games_table tbody tr");
                 gamesData?.forEach((gameData) =>
                 {
-                    const title = decode(gameData.querySelector(".title a")?.rawText || "");
+                    const a = gameData.querySelector(".title a");
+                    const console = gameData.querySelector(".console")?.rawText || "";
+                    const title = decode(((a?.rawText || "") + console));
+
                     results.push(
                     {
-                        name:title.replace(/\n/g,"").replace(/^ +| +$/g, ""),
-                        price:gameData.querySelector(".cib_price span")?.rawText || "",
+                        name:title.replace(/\n/g,"").replace(/^ +| +$/g, "").replace(/ +/g, " "),
+                        price:Number(gameData.querySelector(".cib_price span")?.rawText.replace(/\$/g, "")) || 0,
+                        link:a?.getAttribute("href") || "",
+                        img:"",
+                        provider:""
                     });
                 });
                 const filteredResults =
-                    results.filter((result:PriceData) =>
+                    results.filter((result:GameData) =>
                     {
                         return Util.filterFullyContained(result.name, queryString)
                     });
-                resolve(filteredResults.slice(8));
+                resolve(filteredResults.slice(0,8));
             });
     });
 
-    p.then( (priceData:PriceData[]) =>
+    const wikipediaPromise =  new Promise<string>(resolve =>
     {
-        Promise.all(promises).then((values)=>
+        const url = "https://en.wikipedia.org/wiki/Resident_Evil_2_(2019_video_game)";
+        return Util.loadUrlToBuffer(url).then((data:Buffer) =>
         {
-            response.setHeader('Content-Type', 'application/json');
-            response.setHeader('Access-Control-Allow-Origin', '*');
-
-            const gameData:GameData[] = values.flat();
-
-            const responseBody = JSON.stringify(
-            {
-                priceData:priceData,
-                gameData:gameData
-            });
-
-            response.write(responseBody);
-            response.end();
+            const root = parse(data.toString());
+            const e1:HTMLElement|null = root.querySelector("table.infobox.hproduct");
+            resolve(e1!.toString());
         });
-    })
+    });
 
+
+    let gameData:GameData[];
+
+    let allPromises:Promise<any>[] = commPromises;
+    allPromises = allPromises.concat([priceChartingPromise, wikipediaPromise]);
+
+    Promise.all(allPromises).then((results:any[]) =>
+    {
+        response.setHeader('Content-Type', 'application/json');
+        response.setHeader('Access-Control-Allow-Origin', '*');
+
+        const responseBody = JSON.stringify(
+        {
+            priceData:results.slice(0, commPromises.length).flat(),
+            gameData:results[allPromises.indexOf(priceChartingPromise)],
+            wiki:results[allPromises.indexOf(wikipediaPromise)]
+        });
+
+        response.write(responseBody);
+        response.end();
+    });
 
 
 }
