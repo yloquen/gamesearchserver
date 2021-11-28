@@ -39,7 +39,7 @@ export default class Util
     }
 
 
-    public static getBase64Image(url:string):Promise<string>
+    public static getImage(url:string):Promise<string>
     {
         return new Promise<string>((resolve, reject) =>
         {
@@ -72,6 +72,10 @@ export default class Util
                                 {
                                     resolve(fileName);
                                 });
+                        })
+                        .catch((e) =>
+                        {
+                            resolve(fileName);
                         });
                 });
         });

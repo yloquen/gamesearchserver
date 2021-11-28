@@ -6,6 +6,7 @@ import Util from "./Util";
 import {parse} from "node-html-parser";
 import {decode} from "html-entities";
 import HTMLElement from "node-html-parser/dist/nodes/html";
+import {monitorEventLoopDelay} from "perf_hooks";
 
 const http = require('http');
 const url = require('url');
@@ -70,17 +71,29 @@ function onRequest(request:any, response:any)
             });
     });
 
-    const wikipediaPromise =  new Promise<string>(resolve =>
+    const wikipediaPromise =  new Promise<any>(resolve =>
     {
-        const url = "https://en.wikipedia.org/wiki/Resident_Evil_2_(2019_video_game)";
-        return Util.loadUrlToBuffer(url).then((data:Buffer) =>
+        const url = "https://en.wikipedia.org/w/index.php?search=" + searchWords.join("+") + "+video+game&ns0=1";
+        Util.loadUrlToBuffer(url).then((data:Buffer) =>
         {
             const root = parse(data.toString());
-            const e1:HTMLElement|null = root.querySelector("table.infobox.hproduct");
-            resolve(e1!.toString());
+            const gameLink:string|undefined = root.querySelector("div.mw-search-result-heading a")?.getAttribute("href");
+            if (gameLink)
+            {
+                return Util.loadUrlToBuffer("https://en.wikipedia.org/" + gameLink).then((data:Buffer) =>
+                {
+                    const root = parse(data.toString());
+                    const info:HTMLElement|null = root.querySelector("table.infobox.hproduct");
+                    const reviews:HTMLElement|null = root.querySelector("div.video-game-reviews.vgr-single");
+                    resolve({info:info?.toString(), reviews:reviews?.toString()})
+                });
+            }
+            else
+            {
+                resolve({info:"",reviews:""});
+            }
         });
     });
-
 
     let gameData:GameData[];
 
@@ -92,11 +105,14 @@ function onRequest(request:any, response:any)
         response.setHeader('Content-Type', 'application/json');
         response.setHeader('Access-Control-Allow-Origin', '*');
 
+        const wikiResult = results[allPromises.indexOf(wikipediaPromise)];
+
         const responseBody = JSON.stringify(
         {
-            priceData:results.slice(0, commPromises.length).flat(),
-            gameData:results[allPromises.indexOf(priceChartingPromise)],
-            wiki:results[allPromises.indexOf(wikipediaPromise)]
+            gameData:results.slice(0, commPromises.length).flat(),
+            priceData:results[allPromises.indexOf(priceChartingPromise)],
+            wikiData:wikiResult.info,
+            wikiReviews:wikiResult.reviews
         });
 
         response.write(responseBody);

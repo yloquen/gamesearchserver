@@ -23,7 +23,7 @@ export default class OzoneComm extends BaseComm
             {
                 return new Promise<GameData>((resolve, reject) =>
                 {
-                    Util.getBase64Image(item.t)
+                    Util.getImage(item.t)
                         .then((fileName:string) =>
                         {
                             resolve({

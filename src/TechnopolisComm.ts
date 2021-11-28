@@ -5,7 +5,6 @@ const https = require("https");
 
 import { parse } from 'node-html-parser';
 import Util from "./Util";
-import {Buffer} from "buffer";
 const sharp = require("sharp");
 
 export default class TechnopolisComm extends BaseComm
@@ -29,7 +28,7 @@ export default class TechnopolisComm extends BaseComm
                 return new Promise<GameData>((resolve, reject) =>
                 {
                     const imgUrl = baseUrl + (li.querySelector(".lazyload")?.getAttribute("data-src") || "");
-                    Util.getBase64Image(imgUrl)
+                    Util.getImage(imgUrl)
                         .then((fileName:string) =>
                         {
                             resolve({
