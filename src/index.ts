@@ -71,28 +71,57 @@ function onRequest(request:any, response:any)
             });
     });
 
-    const wikipediaPromise =  new Promise<any>(resolve =>
+    const wikipediaPromise =  new Promise<any>((resolve, reject) =>
     {
         const url = "https://en.wikipedia.org/w/index.php?search=" + searchWords.join("+") + "+video+game&ns0=1";
-        Util.loadUrlToBuffer(url).then((data:Buffer) =>
-        {
-            const root = parse(data.toString());
-            const gameLink:string|undefined = root.querySelector("div.mw-search-result-heading a")?.getAttribute("href");
-            if (gameLink)
+        Util.loadUrlToBuffer(url)
+            .then((data:Buffer) =>
             {
-                return Util.loadUrlToBuffer("https://en.wikipedia.org/" + gameLink).then((data:Buffer) =>
+                return parse(data.toString());
+            })
+            .then((root:any) =>
+            {
+                const gameLink:string|undefined = root.querySelector("div.mw-search-result-heading a")?.getAttribute("href");
+                if (gameLink)
                 {
-                    const root = parse(data.toString());
-                    const info:HTMLElement|null = root.querySelector("table.infobox.hproduct");
-                    const reviews:HTMLElement|null = root.querySelector("div.video-game-reviews.vgr-single");
-                    resolve({info:info?.toString(), reviews:reviews?.toString()})
-                });
-            }
-            else
+                    return Util.loadUrlToBuffer("https://en.wikipedia.org/" + gameLink);
+                }
+            })
+            .then((data:any) =>
             {
-                resolve({info:"",reviews:""});
-            }
-        });
+                const root = parse(data.toString());
+                const info:HTMLElement|null = root.querySelector("table.infobox.hproduct");
+                const reviews:HTMLElement|null = root.querySelector("div.video-game-reviews.vgr-single");
+
+                const imgUrl:string|undefined =
+                    root.querySelector("table.infobox.hproduct .infobox-image a")?.getAttribute("href");
+
+                if (imgUrl)
+                {
+                    return Util.getImage(imgUrl);
+                }
+                else
+                {
+                    reject();
+                }
+
+                let gameData =
+                    {
+
+                    };
+
+                resolve(
+                    {
+                        info:info?.toString(),
+                        reviews:reviews?.toString(),
+                        data:gameData
+                    })
+
+            })
+            .catch((data) =>
+            {
+                resolve({});
+            });
     });
 
     let gameData:GameData[];
