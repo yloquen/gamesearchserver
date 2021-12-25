@@ -6,3 +6,8 @@ export type GameData =
     link:string,
     img:string
 };
+
+export type WikiData =
+{
+    imgURL:string
+};
