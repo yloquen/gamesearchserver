@@ -19,7 +19,7 @@ export default class WikiComm
         {
             const url = "https://en.wikipedia.org/w/index.php?search=" + searchWords.join("+") + "+video+game&ns0=1";
 
-            let info:HTMLElement|null, reviews:HTMLElement|null;
+            let wikiResponse:any;
 
             Util.loadUrlToBuffer(url)
                 .then((data:Buffer) =>
@@ -36,13 +36,9 @@ export default class WikiComm
                 })
                 .then((data:any) =>
                 {
-                    const root = parse(data.toString());
-
-                    info = root.querySelector("table.infobox.hproduct");
-                    reviews = root.querySelector("div.video-game-reviews.vgr-single");
-
+                    wikiResponse = parse(data.toString());
                     const imgUrl:string|undefined =
-                        root.querySelector("table.infobox.hproduct .infobox-image a img")?.getAttribute("src");
+                        wikiResponse.querySelector("table.infobox.hproduct .infobox-image a img")?.getAttribute("src");
 
                     if (imgUrl)
                     {
@@ -55,9 +51,26 @@ export default class WikiComm
                 })
                 .then((imgURL:string|undefined) =>
                 {
+                    const fieldsToExtract = ["Developer(s)", "Platform(s)"];
+
+                    const textInfo:any = [];
+
+                    const rows = wikiResponse.querySelectorAll("table.infobox.hproduct tbody tr");
+                    rows?.forEach((row:any) =>
+                    {
+                        const fieldName:string|undefined = row.querySelector("th a")?.rawText;
+                        if (fieldName && fieldsToExtract.indexOf(fieldName) !== -1)
+                        {
+                            textInfo.push({name:fieldName, value:row.querySelector("td a")?.rawText});
+                        }
+                    });
+
+                    // reviews = root.querySelector("div.video-game-reviews.vgr-single");
+
                     resolve(
                     {
-                        imgURL:"http://localhost/" + imgURL
+                        imgURL:"http://localhost/" + imgURL,
+                        textInfo:textInfo
                     });
                 })
                 .catch((data) =>
