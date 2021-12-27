@@ -51,7 +51,14 @@ export default class WikiComm
                 })
                 .then((imgURL:string|undefined) =>
                 {
-                    const fieldsToExtract = ["Developer(s)", "Platform(s)"];
+                    const fieldsToExtract =
+                    [
+                        "Developer(s)",
+                        "Publisher(s)",
+                        "Platform(s)",
+                        "Release",
+                        "Genre(s)"
+                    ];
 
                     const textInfo:any = [];
 
@@ -65,7 +72,17 @@ export default class WikiComm
                         }
                     });
 
-                    // reviews = root.querySelector("div.video-game-reviews.vgr-single");
+                    const aggregatorScoreRows = wikiResponse.querySelectorAll(".vgr-aggregators.wikitable tr");
+                    aggregatorScoreRows.forEach((score:any) =>
+                    {
+                        const tds = score.querySelectorAll("td");
+                        const name =  tds[0]?.rawText;
+                        const value =  tds[1]?.rawText;
+                        if (name && value)
+                        {
+                            textInfo.push({name:name, value:value.replace(/&#91;\d+&#93;/g, "")});
+                        }
+                    });
 
                     resolve(
                     {
