@@ -21,6 +21,8 @@ export default class WikiComm
 
             let wikiResponse:any;
 
+            let link:string|undefined;
+
             Util.loadUrlToBuffer(url)
                 .then((data:Buffer) =>
                 {
@@ -28,10 +30,15 @@ export default class WikiComm
                 })
                 .then((root:any) =>
                 {
-                    const gameLink:string|undefined = root.querySelector("div.mw-search-result-heading a")?.getAttribute("href");
-                    if (gameLink)
+                    link = root.querySelector("div.mw-search-result-heading a")?.getAttribute("href");
+                    if (link)
                     {
-                        return Util.loadUrlToBuffer("https://en.wikipedia.org/" + gameLink);
+                        link = "https://en.wikipedia.org/" + link;
+                        return Util.loadUrlToBuffer(link);
+                    }
+                    else
+                    {
+                        reject();
                     }
                 })
                 .then((data:any) =>
@@ -42,7 +49,7 @@ export default class WikiComm
 
                     if (imgUrl)
                     {
-                        return Util.getImage("https:" + imgUrl);
+                        return Util.getImage("https:" + imgUrl, 300);
                     }
                     else
                     {
@@ -84,11 +91,14 @@ export default class WikiComm
                         }
                     });
 
-                    resolve(
+                    const resp:WikiData =
                     {
+                        link:link!,
                         imgURL:"http://localhost/" + imgURL,
                         textInfo:textInfo
-                    });
+                    };
+
+                    resolve(resp);
                 })
                 .catch((data) =>
                 {

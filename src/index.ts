@@ -9,6 +9,7 @@ import HTMLElement from "node-html-parser/dist/nodes/html";
 import {monitorEventLoopDelay} from "perf_hooks";
 import WikiComm from "./WikiComm";
 import PriceChartingComm from "./PriceChartingComm";
+import YouTubeComm from "./YouTubeComm";
 
 const http = require('http');
 const url = require('url');
@@ -39,23 +40,26 @@ function onRequest(request:any, response:any)
         return comm.getData(queryString);
     });
 
-    const priceChartingPromise = new PriceChartingComm().getData(searchWords, queryString);
-    const wikipediaPromise = new WikiComm().getData(searchWords);
+    const pcPromise = new PriceChartingComm().getData(searchWords, queryString);
+    const wikiPromise = new WikiComm().getData(searchWords);
+    const ytPromise = new YouTubeComm().getData(searchWords);
 
-    const allPromises:Promise<any>[] = commPromises.concat([priceChartingPromise, wikipediaPromise]);
+    const allPromises:Promise<any>[] = commPromises.concat([pcPromise, wikiPromise, ytPromise]);
 
     Promise.all(allPromises).then((results:any[]) =>
     {
         response.setHeader('Content-Type', 'application/json');
         response.setHeader('Access-Control-Allow-Origin', '*');
 
-        const wikiResult = results[allPromises.indexOf(wikipediaPromise)];
+        const wikiResult = results[allPromises.indexOf(wikiPromise)];
+        const ytResult = results[allPromises.indexOf(ytPromise)];
 
         const responseBody = JSON.stringify(
         {
             gameData:results.slice(0, commPromises.length).flat(),
-            priceData:results[allPromises.indexOf(priceChartingPromise)],
-            wikiData:wikiResult
+            priceData:results[allPromises.indexOf(pcPromise)],
+            wikiData:wikiResult,
+            videoId:ytResult.videoId
         });
 
         response.write(responseBody);

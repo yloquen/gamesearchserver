@@ -39,7 +39,7 @@ export default class Util
     }
 
 
-    public static getImage(url:string):Promise<string>
+    public static getImage(url:string, size:number = 160):Promise<string>
     {
         return new Promise<string>((resolve, reject) =>
         {
@@ -60,7 +60,7 @@ export default class Util
                         .then((result:Buffer) =>
                         {
                             return sharp(result)
-                                .resize(160, 160, {fit:'contain', background:{r:255, g:255, b:255, alpha:1}})
+                                .resize(size, size, {fit:'contain', background:{r:255, g:255, b:255, alpha:1}})
                                 .png()
                                 .toBuffer();
                         })

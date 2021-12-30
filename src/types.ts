@@ -9,6 +9,7 @@ export type GameData =
 
 export type WikiData =
 {
+    link:string,
     imgURL:string,
     textInfo:{name:string, value:string}[]
 };
