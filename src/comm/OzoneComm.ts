@@ -1,6 +1,6 @@
-import {GameData} from "./types";
+import {GameData} from "../types";
 import BaseComm from "./BaseComm";
-import Util from "./Util";
+import Util from "../misc/Util";
 import {Buffer} from "buffer";
 
 const sharp = require("sharp");

@@ -1,6 +1,6 @@
-import {GameData, WikiData} from "./types";
+import {GameData, WikiData} from "../types";
 import BaseComm from "./BaseComm";
-import Util from "./Util";
+import Util from "../misc/Util";
 import {Buffer} from "buffer";
 import HTMLElement from "node-html-parser/dist/nodes/html";
 import {parse} from "node-html-parser";

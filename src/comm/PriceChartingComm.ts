@@ -1,6 +1,6 @@
-import {GameData, WikiData} from "./types";
+import {GameData, WikiData} from "../types";
 import BaseComm from "./BaseComm";
-import Util from "./Util";
+import Util from "../misc/Util";
 import {Buffer} from "buffer";
 import HTMLElement from "node-html-parser/dist/nodes/html";
 import {parse} from "node-html-parser";
@@ -33,7 +33,7 @@ export default class PriceChartingComm
 
                         results.push(
                             {
-                                name:title.replace(/\n/g,"").replace(/^ +| +$/g, "").replace(/ +/g, " "),
+                                name:Util.removeWhitespaces(title),
                                 price:Number(gameData.querySelector(".cib_price span")?.rawText.replace(/\$/g, "")) || 0,
                                 link:a?.getAttribute("href") || "",
                                 img:"",

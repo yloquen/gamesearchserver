@@ -1,15 +1,16 @@
-import BaseComm from "./BaseComm";
+import BaseComm from "./comm/BaseComm";
 import {GameData} from "./types";
-import OzoneComm from "./OzoneComm";
-import TechnopolisComm from "./TechnopolisComm";
-import Util from "./Util";
+import OzoneComm from "./comm/OzoneComm";
+import TechnopolisComm from "./comm/TechnopolisComm";
+import Util from "./misc/Util";
 import {parse} from "node-html-parser";
 
 import HTMLElement from "node-html-parser/dist/nodes/html";
 import {monitorEventLoopDelay} from "perf_hooks";
-import WikiComm from "./WikiComm";
-import PriceChartingComm from "./PriceChartingComm";
-import YouTubeComm from "./YouTubeComm";
+import WikiComm from "./comm/WikiComm";
+import PriceChartingComm from "./comm/PriceChartingComm";
+import YouTubeComm from "./comm/YouTubeComm";
+import BazarComm from "./comm/BazarComm";
 
 const http = require('http');
 const url = require('url');
@@ -21,7 +22,8 @@ function onRequest(request:any, response:any)
     const communicators:BaseComm[] =
     [
         new TechnopolisComm(),
-        new OzoneComm()
+        new OzoneComm(),
+        new BazarComm()
     ];
 
     const queryObject = url.parse(request.url, true).query;

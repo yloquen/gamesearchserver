@@ -1,5 +1,5 @@
-import {GameData} from "./types";
-import Util from "./Util";
+import {GameData} from "../types";
+import Util from "../misc/Util";
 
 const https = require("https");
 

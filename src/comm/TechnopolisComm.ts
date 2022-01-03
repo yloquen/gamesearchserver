@@ -1,10 +1,10 @@
-import {GameData} from "./types";
+import {GameData} from "../types";
 import BaseComm from "./BaseComm";
 const http = require("http");
 const https = require("https");
 
 import { parse } from 'node-html-parser';
-import Util from "./Util";
+import Util from "../misc/Util";
 const sharp = require("sharp");
 
 export default class TechnopolisComm extends BaseComm

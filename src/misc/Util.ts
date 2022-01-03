@@ -1,4 +1,4 @@
-import {GameData} from "./types";
+import {GameData} from "../types";
 import {Buffer} from "buffer";
 
 const https = require("https");
@@ -104,6 +104,18 @@ export default class Util
         }
 
         return true;
+    }
+
+
+    static removeWhitespaces(s:string):string
+    {
+        return s.replace(/\n/g,"").replace(/^ +| +$/g, "").replace(/ +/g, " ")
+    }
+
+
+    static cleanPrice(rawText:string)
+    {
+        return rawText.replace(/[^\d,]+/g, "").replace(/,/g, ".");
     }
 
 
