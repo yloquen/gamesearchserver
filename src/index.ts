@@ -11,11 +11,16 @@ import WikiComm from "./comm/WikiComm";
 import PriceChartingComm from "./comm/PriceChartingComm";
 import YouTubeComm from "./comm/YouTubeComm";
 import BazarComm from "./comm/BazarComm";
+import {NetConnectOpts} from "net";
+import DataBaseModule from "./DataBaseModule";
 
 const http = require('http');
 const url = require('url');
 
+
 http.createServer(onRequest).listen(8080);
+
+const db = new DataBaseModule();
 
 function onRequest(request:any, response:any)
 {
