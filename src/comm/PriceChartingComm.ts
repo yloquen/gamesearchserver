@@ -14,9 +14,9 @@ export default class PriceChartingComm
 {
 
 
-    getData(searchWords:string[], queryString:string):Promise<any>
+    getData(searchWords:string[], queryString:string):Promise<GameData[]>
     {
-        return new Promise<GameData[]>(resolve =>
+        return new Promise<GameData[]>((resolve, reject) =>
         {
             const results:GameData[] = [];
             const url = "https://www.pricecharting.com/search-products?q=" + searchWords.join("+")  + "+PAL&type=prices";
@@ -46,6 +46,10 @@ export default class PriceChartingComm
                             return Util.filterFullyContained(result.name, queryString)
                         });
                     resolve(filteredResults.slice(0,8));
+                })
+                .catch((e) =>
+                {
+                    reject(e);
                 });
         });
     }

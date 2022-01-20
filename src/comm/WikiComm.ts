@@ -94,7 +94,7 @@ export default class WikiComm
                     const resp:WikiData =
                     {
                         link:link!,
-                        imgURL:"http://localhost/" + imgURL,
+                        imgURL:imgURL || "",
                         textInfo:textInfo
                     };
 
@@ -102,7 +102,7 @@ export default class WikiComm
                 })
                 .catch((data) =>
                 {
-                    resolve({});
+                    reject({});
                 });
         });
     }

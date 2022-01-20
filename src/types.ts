@@ -13,3 +13,11 @@ export type WikiData =
     imgURL:string,
     textInfo:{name:string, value:string}[]
 };
+
+export type SearchResult =
+{
+    gameData:GameData[],
+    priceData:GameData[],
+    wikiData:WikiData,
+    videoId:string
+};

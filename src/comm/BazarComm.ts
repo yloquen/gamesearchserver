@@ -24,7 +24,7 @@ export default class BazarComm extends BaseComm
                 const name = li.querySelector("div.title span.title").rawText;
                 if (name)
                 {
-                    return Util.filterFullyContained(Util.removeWhitespaces(name), query)
+                    return Util.filterFullyContained(Util.removeWhitespaces(name), query);
                 }
                 return false;
             })
@@ -40,10 +40,11 @@ export default class BazarComm extends BaseComm
                                 name:Util.removeWhitespaces(li.querySelector("div.title span.title")?.rawText!),
                                 price:Number(Util.cleanPrice(li.querySelector(".price")?.rawText || "0")),
                                 provider:"Bazar",
-                                img:"http://localhost/" + fileName,
+                                img:fileName,
                                 link:li.querySelector("a")?.getAttribute("href")!
                             });
-                        });
+                        })
+                        .catch((e) => {reject(e)});
                 });
             }) || [];
 

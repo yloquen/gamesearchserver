@@ -35,10 +35,11 @@ export default class TechnopolisComm extends BaseComm
                                 name:li.querySelector(".modal-header")?.querySelector("strong")?.rawText || "",
                                 price:Number(li.querySelector(".price-value")?.rawText),
                                 provider:"Technopolis",
-                                img:"http://localhost/" + fileName,
+                                img:fileName,
                                 link:baseUrl + (li.querySelector(".preview")?.querySelector("a")?.getAttribute("data-src") || "")
                             });
-                        });
+                        })
+                        .catch((e) => {reject(e)});
                 });
             }) || [];
 

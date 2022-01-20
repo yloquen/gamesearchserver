@@ -28,12 +28,13 @@ export default class OzoneComm extends BaseComm
                         {
                             resolve({
                                 link:item.u,
-                                img:"http://localhost/" + fileName,
+                                img:fileName,
                                 price:Number(item.p),
                                 name:item.l,
                                 provider:"Ozone"
                             });
-                        });
+                        })
+                        .catch((e) => {reject(e)});
                 });
             });
 
