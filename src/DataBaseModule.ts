@@ -1,7 +1,7 @@
 import {NetConnectOpts} from "net";
 import {credentials} from "./cred";
-import {SearchResult} from "./types";
-import {Connection, MysqlError} from "mysql";
+import {GameData, SearchResult} from "./types";
+import {Connection, MysqlError, OkPacket} from "mysql";
 const mysql = require('mysql');
 
 
@@ -38,50 +38,8 @@ export default class DataBaseModule
     }
 
 
-    add(queryString:string, result:SearchResult):Promise<any>
+    add(queryString:string, results:SearchResult):Promise<any>
     {
-/*        this.connection.beginTransaction((error) => {
-            if (error)
-            {
-                throw error;
-            }
-
-            this.queryPromise()
-            .then()
-
-            this.connection.query('INSERT INTO posts SET title=?', title, function (error, results, fields)
-            {
-                if (error)
-                {
-                    return this.connection.rollback(function() {
-                        throw error;
-                    });
-                }
-
-                var log = 'Post ' + results.insertId + ' added';
-
-                this.connection.query('INSERT INTO log SET data=?', log, function (error, results, fields)
-                {
-                    if (error)
-                    {
-                        return this.connection.rollback(function() {
-                            throw error;
-                        });
-                    }
-                    this.connection.commit(function(err) {
-                        if (err) {
-                            return this.connection.rollback(function() {
-                                throw err;
-                            });
-                        }
-                        console.log('success!');
-                    });
-                });
-            });
-        });*/
-
-
-
         return new Promise<any>((resolve, reject) =>
         {
             this.connection.connect();
@@ -94,11 +52,17 @@ export default class DataBaseModule
                 }
                 else
                 {
-                    const q = "INSERT INTO searches (query_string) VALUES (?);";
-                    this.executeQuery(q, [queryString])
+                    const q = "INSERT INTO searches VALUES ?;";
+                    this.executeQuery(q, [[null, queryString, null]])
+                        .then((r:OkPacket) =>
+                        {
+                            const q = "INSERT INTO gameresults VALUES ?;";
+                            const vals = results.gameData.map(d =>
+                                [null, r.insertId, d.link, d.img, d.name, d.provider, d.price]);
+                            return this.executeQuery(q, vals);
+                        })
                         .then((r:any) =>
                         {
-                            console.log(1);
                             this.connection.commit();
                         })
                         .catch((e) =>
@@ -122,7 +86,7 @@ export default class DataBaseModule
     {
         return new Promise((resolve, reject) =>
         {
-            this.connection.query(mysql.format(q, values), (error) =>
+            this.connection.query(mysql.format(q, [values]), (error, results) =>
             {
                 if (error)
                 {
@@ -130,7 +94,7 @@ export default class DataBaseModule
                 }
                 else
                 {
-                    resolve(undefined);
+                    resolve(results);
                 }
             });
         });
