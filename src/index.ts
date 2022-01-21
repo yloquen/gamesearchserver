@@ -1,17 +1,11 @@
 import BaseComm from "./comm/BaseComm";
-import {GameData} from "./types";
 import OzoneComm from "./comm/OzoneComm";
 import TechnopolisComm from "./comm/TechnopolisComm";
 import Util from "./misc/Util";
-import {parse} from "node-html-parser";
-
-import HTMLElement from "node-html-parser/dist/nodes/html";
-import {monitorEventLoopDelay} from "perf_hooks";
 import WikiComm from "./comm/WikiComm";
 import PriceChartingComm from "./comm/PriceChartingComm";
 import YouTubeComm from "./comm/YouTubeComm";
 import BazarComm from "./comm/BazarComm";
-import {NetConnectOpts} from "net";
 import DataBaseModule from "./DataBaseModule";
 import C_Config from "./C_Config";
 
@@ -35,10 +29,10 @@ function onRequest(request:any, response:any)
     }
     const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
 
-/*    db.checkQuery(queryString).then((results:any[]) =>
+    db.checkQuery(queryString).then((results:any[]) =>
     {
         console.log(results);
-    });*/
+    });
 
     const communicators:BaseComm[] =
     [
@@ -49,7 +43,7 @@ function onRequest(request:any, response:any)
 
     const searchWords = Util.toSearchWords(queryString);
 
-    const commPromises:Promise<any[]>[] = communicators.map(comm =>
+    const commPromises:Promise<any>[] = communicators.map(comm =>
     {
         return comm.getData(queryString);
     });
@@ -58,7 +52,7 @@ function onRequest(request:any, response:any)
     const wikiPromise = new WikiComm().getData(searchWords);
     const ytPromise = new YouTubeComm().getData(searchWords);
 
-    const allPromises:Promise<any>[] = commPromises;//.concat([pcPromise, wikiPromise, ytPromise]);
+    const allPromises:Promise<any>[] = commPromises.concat([pcPromise, wikiPromise, ytPromise]);
 
     Promise.all(allPromises).then((results:any[]) =>
     {
@@ -68,12 +62,12 @@ function onRequest(request:any, response:any)
         const resp =
         {
             gameData:results.slice(0, commPromises.length).flat(),
-            priceData:[],//results[allPromises.indexOf(pcPromise)],
-            wikiData:{link:"", imgURL:"", textInfo:[]},//wikiResult,
-            videoId:""//ytResult.videoId
+            priceData:results[allPromises.indexOf(pcPromise)],
+            wikiData:wikiResult,
+            videoId:ytResult.videoId
         };
 
-        db.add(queryString, resp);
+        // db.add(queryString, resp);
 
         response.setHeader('Content-Type', 'application/json');
         response.setHeader('Access-Control-Allow-Origin', '*');

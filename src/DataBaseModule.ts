@@ -17,23 +17,22 @@ export default class DataBaseModule
     checkQuery(queryString:string):Promise<any>
     {
         this.connection.connect();
+
         return new Promise<any>((resolve, reject) =>
         {
-            let query = "SELECT * FROM searches WHERE query_string = ?;";
-            query = mysql.format(query, [queryString]);
+            this.executeQuery("SELECT * FROM searches WHERE query_string = ?;", [queryString])
+                .then((r:any) =>
+                {
+                    console.log(1);
+                })
+                .catch((e)=>
+                {
 
-            this.connection.query(query, (error:string, results:any, fields:any) =>
-            {
-                this.connection.end();
-                if (error)
+                })
+                .finally(() =>
                 {
-                    reject(error);
-                }
-                else
-                {
-                    resolve(results);
-                }
-            });
+                    this.connection.end();
+                });
         });
     }
 
@@ -53,13 +52,41 @@ export default class DataBaseModule
                 else
                 {
                     const q = "INSERT INTO searches VALUES ?;";
+                    let searchId:number;
                     this.executeQuery(q, [[null, queryString, null]])
                         .then((r:OkPacket) =>
                         {
+                            searchId = r.insertId;
                             const q = "INSERT INTO gameresults VALUES ?;";
                             const vals = results.gameData.map(d =>
-                                [null, r.insertId, d.link, d.img, d.name, d.provider, d.price]);
-                            return this.executeQuery(q, vals);
+                                [null, searchId, d.link, d.img, d.name, d.provider, d.price]);
+                            return vals.length > 0 ? this.executeQuery(q, vals) : undefined;
+                        })
+                        .then(() =>
+                        {
+                            const q = "INSERT INTO priceresults VALUES ?;";
+                            const vals = results.priceData.map(d =>
+                                [null, searchId, d.link, d.name, d.price]);
+
+                            return vals.length > 0 ? this.executeQuery(q, vals) : undefined;
+                        })
+                        .then(() =>
+                        {
+                            const q = "INSERT INTO wikiresults VALUES ?;";
+                            const vals = [[
+                                null,
+                                searchId,
+                                results.wikiData.link,
+                                results.wikiData.imgURL,
+                                JSON.stringify(results.wikiData.textInfo)
+                            ]];
+                            return vals.length > 0 ? this.executeQuery(q, vals) : undefined;
+                        })
+                        .then(() =>
+                        {
+                            const q = "INSERT INTO videoresults VALUES ?;";
+                            const vals = [[null, searchId, results.videoId]];
+                            return vals.length > 0 ? this.executeQuery(q, vals) : undefined;
                         })
                         .then((r:any) =>
                         {
