@@ -8,6 +8,7 @@ import YouTubeComm from "./comm/YouTubeComm";
 import BazarComm from "./comm/BazarComm";
 import DataBaseModule from "./DataBaseModule";
 import C_Config from "./C_Config";
+import {SearchResult} from "./types";
 
 const http = require('http');
 const url = require('url');
@@ -29,54 +30,71 @@ function onRequest(request:any, response:any)
     }
     const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
 
-    db.checkQuery(queryString).then((results:any[]) =>
-    {
-        console.log(results);
-    });
-
-    const communicators:BaseComm[] =
-    [
-        new TechnopolisComm(),
-        new OzoneComm(),
-        new BazarComm()
-    ];
-
-    const searchWords = Util.toSearchWords(queryString);
-
-    const commPromises:Promise<any>[] = communicators.map(comm =>
-    {
-        return comm.getData(queryString);
-    });
-
-    const pcPromise = new PriceChartingComm().getData(searchWords, queryString);
-    const wikiPromise = new WikiComm().getData(searchWords);
-    const ytPromise = new YouTubeComm().getData(searchWords);
-
-    const allPromises:Promise<any>[] = commPromises.concat([pcPromise, wikiPromise, ytPromise]);
-
-    Promise.all(allPromises).then((results:any[]) =>
-    {
-        const wikiResult = results[allPromises.indexOf(wikiPromise)];
-        const ytResult = results[allPromises.indexOf(ytPromise)];
-
-        const resp =
+    db.getCachedQuery(queryString)
+        .then((results:SearchResult) =>
         {
-            gameData:results.slice(0, commPromises.length).flat(),
-            priceData:results[allPromises.indexOf(pcPromise)],
-            wikiData:wikiResult,
-            videoId:ytResult.videoId
-        };
+            response.setHeader('Content-Type', 'application/json');
+            response.setHeader('Access-Control-Allow-Origin', '*');
 
-        // db.add(queryString, resp);
+            const responseBody = JSON.stringify(results);
 
-        response.setHeader('Content-Type', 'application/json');
-        response.setHeader('Access-Control-Allow-Origin', '*');
+            response.write(responseBody);
+            response.end();
+        })
+        .catch(() =>
+        {
+            const communicators:BaseComm[] =
+                [
+                    new TechnopolisComm(),
+                    new OzoneComm(),
+                    new BazarComm()
+                ];
 
-        const responseBody = JSON.stringify(resp);
+            const commPromises:Promise<any>[] = communicators.map(comm =>
+            {
+                return comm.getData(queryString);
+            });
 
-        response.write(responseBody);
-        response.end();
-    });
+            const searchWords = Util.toSearchWords(queryString);
+
+            const pcPromise = new PriceChartingComm().getData(searchWords, queryString);
+            const wikiPromise = new WikiComm().getData(searchWords);
+            const ytPromise = new YouTubeComm().getData(searchWords);
+
+            const allPromises:Promise<any>[] = commPromises.concat([pcPromise, wikiPromise, ytPromise]);
+
+            let responseData:SearchResult;
+
+            Promise.all(allPromises)
+                .then((results:any[]) =>
+                {
+                    const wikiResult = results[allPromises.indexOf(wikiPromise)];
+                    const ytResult = results[allPromises.indexOf(ytPromise)];
+
+                    responseData =
+                        {
+                            gameData:results.slice(0, commPromises.length).flat(),
+                            priceData:results[allPromises.indexOf(pcPromise)],
+                            wikiData:wikiResult,
+                            videoId:ytResult.videoId
+                        };
+                })
+                .then(() =>
+                {
+                    return db.add(queryString, responseData);
+                })
+                .then(() =>
+                {
+                    response.setHeader('Content-Type', 'application/json');
+                    response.setHeader('Access-Control-Allow-Origin', '*');
+
+                    const responseBody = JSON.stringify(responseData);
+
+                    response.write(responseBody);
+                    response.end();
+                });
+        });
+
 
 
 }

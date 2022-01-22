@@ -1,4 +1,3 @@
-import {NetConnectOpts} from "net";
 import {credentials} from "./cred";
 import {GameData, SearchResult} from "./types";
 import {Connection, MysqlError, OkPacket} from "mysql";
@@ -12,26 +11,56 @@ export default class DataBaseModule
     constructor()
     {
         this.connection = mysql.createConnection(credentials);
+        // this.connection.connect();
     }
 
-    checkQuery(queryString:string):Promise<any>
+    getCachedQuery(queryString:string):Promise<SearchResult>
     {
-        this.connection.connect();
+        const responseData:SearchResult =
+        {
+            gameData:[],
+            priceData:[],
+            wikiData:{link:"", imgURL:"", textInfo:[]},
+            videoId:""
+        };
 
         return new Promise<any>((resolve, reject) =>
         {
-            this.executeQuery("SELECT * FROM searches WHERE query_string = ?;", [queryString])
-                .then((r:any) =>
+            const q = `SELECT s.id, g.link, g.img, g.link, g.price, g.name, g.provider FROM searches s
+            JOIN gameresults g ON g.search_id = s.id
+            WHERE s.query_string = ?;`;
+
+            this.executeQuery(q, [queryString])
+                .then((dbResponse:any) =>
                 {
-                    console.log(1);
+                    responseData.gameData = dbResponse;
+
+                    const q = `SELECT s.id, p.link, p.name, p.price FROM searches s
+                    JOIN priceresults p ON p.search_id = s.id
+                    WHERE s.query_string = ?;`;
+
+                    return this.executeQuery(q, [queryString]);
+                })
+                .then((dbResponse:any) =>
+                {
+                    const q = `SELECT s.id, v.video_id FROM searches s
+                    JOIN videoresults v ON p.search_id = v.id
+                    WHERE s.query_string = ?;`;
+
+                    return this.executeQuery(q, [queryString]);
+                })
+                .then((dbResponse:any) =>
+                {
+                    responseData.videoId = dbResponse[0]?.video_id || "";
+                    resolve(responseData);
                 })
                 .catch((e)=>
                 {
-
+                    reject(e);
                 })
                 .finally(() =>
                 {
-                    this.connection.end();
+                    // this.connection.end();
                 });
         });
     }
@@ -41,7 +70,7 @@ export default class DataBaseModule
     {
         return new Promise<any>((resolve, reject) =>
         {
-            this.connection.connect();
+            // this.connection.connect();
 
             this.connection.beginTransaction((err:MysqlError) =>
             {
@@ -91,6 +120,7 @@ export default class DataBaseModule
                         .then((r:any) =>
                         {
                             this.connection.commit();
+                            resolve(undefined);
                         })
                         .catch((e) =>
                         {
@@ -99,7 +129,7 @@ export default class DataBaseModule
                         })
                         .finally(() =>
                         {
-                            this.connection.end();
+                            // this.connection.end();
                         });
                 }
             });
