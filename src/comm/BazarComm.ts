@@ -58,7 +58,7 @@ export default class BazarComm extends BaseComm
 
     generateUrl(searchString:string)
     {
-        return "https://bazar.bg/obiavi/igri-konzoli?q=" + searchString;
+        return "https://bazar.bg/obiavi/igri-konzoli?q=" + encodeURIComponent(searchString);
     }
 
 

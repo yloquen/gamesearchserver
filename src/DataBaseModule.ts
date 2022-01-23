@@ -1,6 +1,7 @@
 import {credentials} from "./cred";
 import {GameData, SearchResult} from "./types";
 import {Connection, MysqlError, OkPacket} from "mysql";
+import C_Config from "./C_Config";
 const mysql = require('mysql');
 
 
@@ -16,52 +17,80 @@ export default class DataBaseModule
 
     getCachedQuery(queryString:string):Promise<SearchResult>
     {
-        const responseData:SearchResult =
-        {
-            gameData:[],
-            priceData:[],
-            wikiData:{link:"", imgURL:"", textInfo:[]},
-            videoId:""
-        };
-
         return new Promise<any>((resolve, reject) =>
         {
-            const q = `SELECT s.id, g.link, g.img, g.link, g.price, g.name, g.provider FROM searches s
-            JOIN gameresults g ON g.search_id = s.id
-            WHERE s.query_string = ?;`;
+            const responseData:SearchResult =
+            {
+                gameData:[],
+                priceData:[],
+                wikiData:{link:"", imgURL:"", textInfo:[]},
+                videoId:""
+            };
+            let searchId:number;
+            const q = `SELECT id, search_date FROM searches WHERE query_string = ?`;
+            this.executeQuery(q, [queryString]).then((dbResponse:any[]) =>
+            {
+                if (dbResponse.length !== 1)
+                {
+                    throw new Error("Cached version not found");
+                }
+                else
+                {
+                    return dbResponse;
+                }
+            })
+            .then((dbResponse:any[]) =>
+            {
+                searchId = dbResponse[0].id;
+                const secondsSinceSearch = (new Date().getTime() - new Date(dbResponse[0].search_date).getTime())*.001;
+                let query;
+                if (secondsSinceSearch > C_Config.CACHE_DURATION_SECONDS)
+                {
+                    query = `DELETE FROM videoresults WHERE search_id = ?`;
+                }
+                else
+                {
+                    query = `SELECT img, link, price, name, provider FROM gameresults WHERE search_id = ?;`;
+                }
+                return this.executeQuery(query, [searchId])
+            })
+            .then((dbResponse:any) =>
+            {
+                if (!(dbResponse instanceof Array))
+                {
+                    throw new Error("Cached version expired");
+                }
+                responseData.gameData = dbResponse;
+                const q = `SELECT link, price, name FROM priceresults WHERE search_id = ?;`;
+                return this.executeQuery(q, [searchId])
+            })
+            .then((dbResponse:any[]) =>
+            {
+                responseData.priceData = dbResponse;
+                const q = `SELECT img, text_info, link FROM wikiresults WHERE search_id = ?;`;
+                return this.executeQuery(q, [searchId]);
+            })
+            .then((dbResponse:any[]) =>
+            {
+                responseData.wikiData =
+                {
+                    link:dbResponse[0]?.link,
+                    imgURL:dbResponse[0]?.img,
+                    textInfo:JSON.parse(dbResponse[0]?.text_info)
+                };
 
-            this.executeQuery(q, [queryString])
-                .then((dbResponse:any) =>
-                {
-                    responseData.gameData = dbResponse;
-
-                    const q = `SELECT s.id, p.link, p.name, p.price FROM searches s
-                    JOIN priceresults p ON p.search_id = s.id
-                    WHERE s.query_string = ?;`;
-
-                    return this.executeQuery(q, [queryString]);
-                })
-                .then((dbResponse:any) =>
-                {
-                    const q = `SELECT s.id, v.video_id FROM searches s
-                    JOIN videoresults v ON p.search_id = v.id
-                    WHERE s.query_string = ?;`;
-
-                    return this.executeQuery(q, [queryString]);
-                })
-                .then((dbResponse:any) =>
-                {
-                    responseData.videoId = dbResponse[0]?.video_id || "";
-                    resolve(responseData);
-                })
-                .catch((e)=>
-                {
-                    reject(e);
-                })
-                .finally(() =>
-                {
-                    // this.connection.end();
-                });
+                const q = `SELECT video_id FROM videoresults WHERE search_id = ?;`;
+                return this.executeQuery(q, [searchId]);
+            })
+            .then((dbResponse:any[]) =>
+            {
+                responseData.videoId = dbResponse[0]?.video_id;
+                resolve(responseData);
+            })
+            .catch((e:Error) =>
+            {
+                reject(e);
+            })
         });
     }
 
@@ -70,8 +99,6 @@ export default class DataBaseModule
     {
         return new Promise<any>((resolve, reject) =>
         {
-            // this.connection.connect();
-
             this.connection.beginTransaction((err:MysqlError) =>
             {
                 if (err)
@@ -129,7 +156,7 @@ export default class DataBaseModule
                         })
                         .finally(() =>
                         {
-                            // this.connection.end();
+
                         });
                 }
             });

@@ -18,6 +18,17 @@ http.createServer(onRequest).listen(8080);
 
 const db = new DataBaseModule();
 
+function sendResponse(response:any, results:SearchResult)
+{
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('Access-Control-Allow-Origin', '*');
+
+    const responseBody = JSON.stringify(results);
+
+    response.write(responseBody);
+    response.end();
+}
+
 function onRequest(request:any, response:any)
 {
 
@@ -31,24 +42,18 @@ function onRequest(request:any, response:any)
     const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
 
     db.getCachedQuery(queryString)
-        .then((results:SearchResult) =>
+        .then((searchResults:SearchResult) =>
         {
-            response.setHeader('Content-Type', 'application/json');
-            response.setHeader('Access-Control-Allow-Origin', '*');
-
-            const responseBody = JSON.stringify(results);
-
-            response.write(responseBody);
-            response.end();
+            sendResponse(response, searchResults);
         })
         .catch(() =>
         {
             const communicators:BaseComm[] =
-                [
-                    new TechnopolisComm(),
-                    new OzoneComm(),
-                    new BazarComm()
-                ];
+            [
+                new TechnopolisComm(),
+                new OzoneComm(),
+                new BazarComm()
+            ];
 
             const commPromises:Promise<any>[] = communicators.map(comm =>
             {
@@ -63,7 +68,7 @@ function onRequest(request:any, response:any)
 
             const allPromises:Promise<any>[] = commPromises.concat([pcPromise, wikiPromise, ytPromise]);
 
-            let responseData:SearchResult;
+            let searchResult:SearchResult;
 
             Promise.all(allPromises)
                 .then((results:any[]) =>
@@ -71,7 +76,7 @@ function onRequest(request:any, response:any)
                     const wikiResult = results[allPromises.indexOf(wikiPromise)];
                     const ytResult = results[allPromises.indexOf(ytPromise)];
 
-                    responseData =
+                    searchResult =
                         {
                             gameData:results.slice(0, commPromises.length).flat(),
                             priceData:results[allPromises.indexOf(pcPromise)],
@@ -81,17 +86,11 @@ function onRequest(request:any, response:any)
                 })
                 .then(() =>
                 {
-                    return db.add(queryString, responseData);
+                    db.add(queryString, searchResult);
                 })
                 .then(() =>
                 {
-                    response.setHeader('Content-Type', 'application/json');
-                    response.setHeader('Access-Control-Allow-Origin', '*');
-
-                    const responseBody = JSON.stringify(responseData);
-
-                    response.write(responseBody);
-                    response.end();
+                    sendResponse(response, searchResult);
                 });
         });
 
