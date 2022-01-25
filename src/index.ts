@@ -86,7 +86,7 @@ function onRequest(request:any, response:any)
                 })
                 .then(() =>
                 {
-                    db.add(queryString, searchResult);
+                    return db.add(queryString, searchResult);
                 })
                 .then(() =>
                 {
