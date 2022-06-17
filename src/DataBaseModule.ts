@@ -46,7 +46,7 @@ export default class DataBaseModule
                 let query;
                 if (secondsSinceSearch > C_Config.CACHE_DURATION_SECONDS)
                 {
-                    query = `DELETE FROM videoresults WHERE search_id = ?`;
+                    query = `DELETE FROM searches WHERE id = ?`;
                 }
                 else
                 {
