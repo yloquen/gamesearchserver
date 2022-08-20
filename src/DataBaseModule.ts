@@ -136,13 +136,13 @@ export default class DataBaseModule
                                 results.wikiData.imgURL,
                                 JSON.stringify(results.wikiData.textInfo)
                             ]];
-                            return vals.length > 0 ? this.executeQuery(q, vals) : undefined;
+                            return this.executeQuery(q, vals);
                         })
                         .then(() =>
                         {
                             const q = "INSERT INTO videoresults VALUES ?;";
                             const vals = [[null, searchId, results.videoId]];
-                            return vals.length > 0 ? this.executeQuery(q, vals) : undefined;
+                            return this.executeQuery(q, vals);
                         })
                         .then((r:any) =>
                         {

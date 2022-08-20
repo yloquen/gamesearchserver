@@ -9,14 +9,33 @@ import BazarComm from "./comm/BazarComm";
 import DataBaseModule from "./DataBaseModule";
 import C_Config from "./C_Config";
 import {SearchResult} from "./types";
+import {IncomingMessage, ServerResponse} from "http";
 
 const http = require('http');
 const url = require('url');
-
+const crypto = require('crypto');
 
 http.createServer(onRequest).listen(8080);
 
 const db = new DataBaseModule();
+
+
+//crypto.pbkdf2("test", "lsudfkhsfjh", 100, 128, )
+
+/*const salt = crypto.randomBytes(16).toString('base64');
+
+crypto.pbkdf2('qwerty1234', salt, 100000, 64,
+    'sha512', (err:any, derivedKey:Buffer) => {
+
+        if (err)
+        {
+            // now handle it !
+        }
+        // Prints derivedKey
+        const h = derivedKey.toString('base64');
+        debugger;
+    });*/
+
 
 function sendResponse(response:any, results:SearchResult)
 {
@@ -29,18 +48,46 @@ function sendResponse(response:any, results:SearchResult)
     response.end();
 }
 
-function onRequest(request:any, response:any)
+function onRequest(request:IncomingMessage, response:ServerResponse)
 {
+    const parsedUrl =  url.parse(request.url, true);
+    const queryObject = parsedUrl.query;
 
-    const queryObject = url.parse(request.url, true).query;
-
-    if (!queryObject.q)
+    switch (parsedUrl.pathname)
     {
-        response.end();
-        return
-    }
-    const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
+        case "/login":
+        {
+            login(request);
+            break;
+        }
 
+        case "/search":
+        {
+            if (queryObject.q)
+            {
+                const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
+                parseSearch(queryString, response);
+            }
+            else
+            {
+                response.end();
+            }
+            break;
+        }
+    }
+}
+
+
+function login(request:IncomingMessage)
+{
+    const data = request.read();
+    console.log(data);
+    debugger;
+}
+
+
+function parseSearch(queryString:string, response:ServerResponse)
+{
     db.getCachedQuery(queryString)
         .then((searchResults:SearchResult) =>
         {
@@ -49,11 +96,11 @@ function onRequest(request:any, response:any)
         .catch(() =>
         {
             const communicators:BaseComm[] =
-            [
-                new TechnopolisComm(),
-                new OzoneComm(),
-                new BazarComm()
-            ];
+                [
+                    new TechnopolisComm(),
+                    new OzoneComm(),
+                    new BazarComm()
+                ];
 
             const commPromises:Promise<any>[] = communicators.map(comm =>
             {
@@ -93,7 +140,4 @@ function onRequest(request:any, response:any)
                     sendResponse(response, searchResult);
                 });
         });
-
-
-
 }
