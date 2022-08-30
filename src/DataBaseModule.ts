@@ -15,6 +15,17 @@ export default class DataBaseModule
         // this.connection.connect();
     }
 
+
+    getUserData(email:string):Promise<any>
+    {
+        const q = `SELECT passhash, salt, id FROM user WHERE email = ?`;
+        return this.executeQuery(q, [email]).then((dbResponse:any[]) =>
+        {
+            return dbResponse;
+        });
+    }
+
+
     getCachedQuery(queryString:string):Promise<SearchResult>
     {
         return new Promise<any>((resolve, reject) =>
@@ -115,14 +126,14 @@ export default class DataBaseModule
                             searchId = r.insertId;
                             const q = "INSERT INTO gameresults VALUES ?;";
                             const vals = results.gameData.map(d =>
-                                [null, searchId, d.link, d.img, d.name, d.provider, d.price]);
+                                [null, searchId, d.link, d.img, d.name, d.provider, d.price || null]);
                             return vals.length > 0 ? this.executeQuery(q, vals) : undefined;
                         })
                         .then(() =>
                         {
                             const q = "INSERT INTO priceresults VALUES ?;";
                             const vals = results.priceData.map(d =>
-                                [null, searchId, d.link, d.name, d.price]);
+                                [null, searchId, d.link, d.name, d.price || null]);
 
                             return vals.length > 0 ? this.executeQuery(q, vals) : undefined;
                         })
@@ -170,17 +181,25 @@ export default class DataBaseModule
     {
         return new Promise((resolve, reject) =>
         {
-            this.connection.query(mysql.format(q, [values]), (error, results) =>
+            try
             {
-                if (error)
+                this.connection.query(mysql.format(q, [values]), (error, results) =>
                 {
-                    reject(error);
-                }
-                else
-                {
-                    resolve(results);
-                }
-            });
+                    debugger;
+                    if (error)
+                    {
+                        reject(error);
+                    }
+                    else
+                    {
+                        resolve(results);
+                    }
+                });
+            }
+            catch (e)
+            {
+                reject(e);
+            }
         });
     }
 

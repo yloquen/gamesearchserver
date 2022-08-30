@@ -10,6 +10,8 @@ import DataBaseModule from "./DataBaseModule";
 import C_Config from "./C_Config";
 import {SearchResult} from "./types";
 import {IncomingMessage, ServerResponse} from "http";
+import {debug} from "util";
+
 
 const http = require('http');
 const url = require('url');
@@ -18,46 +20,125 @@ const crypto = require('crypto');
 http.createServer(onRequest).listen(8080);
 
 const db = new DataBaseModule();
+const activeSessions:Record<number, any> = {};
 
 
-//crypto.pbkdf2("test", "lsudfkhsfjh", 100, 128, )
-
-/*const salt = crypto.randomBytes(16).toString('base64');
-
-crypto.pbkdf2('qwerty1234', salt, 100000, 64,
-    'sha512', (err:any, derivedKey:Buffer) => {
-
-        if (err)
-        {
-            // now handle it !
-        }
-        // Prints derivedKey
-        const h = derivedKey.toString('base64');
-        debugger;
-    });*/
-
-
-function sendResponse(response:any, results:SearchResult)
+function sendResponse(response:ServerResponse, data:any)
 {
     response.setHeader('Content-Type', 'application/json');
-    response.setHeader('Access-Control-Allow-Origin', '*');
-
-    const responseBody = JSON.stringify(results);
-
-    response.write(responseBody);
+    response.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
+    response.setHeader('Access-Control-Allow-Credentials', 'true');
+    response.write(JSON.stringify(data));
     response.end();
 }
 
-function onRequest(request:IncomingMessage, response:ServerResponse)
+
+function parseCookies (req:IncomingMessage)
 {
-    const parsedUrl =  url.parse(request.url, true);
+    const list:any = {};
+    const cookieHeader = req.headers?.cookie;
+    if (!cookieHeader) return list;
+
+    cookieHeader.split(`;`).forEach((cookie) =>
+    {
+        let [ name, ...rest] = cookie.split(`=`);
+        name = name?.trim();
+        const value = rest.join(`=`).trim();
+        if (name && value)
+        {
+            list[name] = decodeURIComponent(value);
+        }
+    });
+
+    return list;
+}
+
+function onRequest(req:IncomingMessage, resp:ServerResponse)
+{
+    let body = '';
+    if (req.method === 'POST')
+    {
+        req.on('data', chunk =>
+        {
+            body += chunk.toString();
+        });
+
+        req.on('end', () =>
+        {
+            processRequest(req, resp, JSON.parse(body));
+        });
+    }
+    else
+    {
+        processRequest(req, resp);
+    }
+}
+
+function processRequest(req:IncomingMessage, resp:ServerResponse, data:any = undefined)
+{
+    const parsedUrl = url.parse(req.url, true);
     const queryObject = parsedUrl.query;
 
     switch (parsedUrl.pathname)
     {
         case "/login":
         {
-            login(request);
+            const cookies = parseCookies(req);
+            const sid = cookies.sid;
+            if (sid && activeSessions[sid])
+            {
+                sendResponse(resp, {email:activeSessions[sid].email});
+            }
+            else
+            {
+                db.getUserData(data.email).then((d:any[]) =>
+                {
+                    return new Promise((resolve:Function, reject:Function) =>
+                    {
+                        if (d.length === 1)
+                        {
+                            crypto.pbkdf2(data.pass, d[0].salt, 100000, 64,
+                                'sha512', (err:any, derivedKey:Buffer) => {
+
+                                    if (err)
+                                    {
+                                        reject(new Error("LOGIN_ERROR_2"));
+                                    }
+                                    // Prints derivedKey
+                                    const h = derivedKey.toString('base64');
+
+                                    if (d[0].passhash === h)
+                                    {
+                                        // sm.createSession();
+                                        const sid = crypto.randomBytes(32).toString('base64');
+                                        activeSessions[sid] = { id:d[0].id, email:data.email };
+                                        resp.setHeader("Set-Cookie", `sid=${sid}; Max-Age=3600`);
+                                        resolve({email:data.email});
+                                    }
+                                    else
+                                    {
+                                        reject(new Error("LOGIN_ERROR_3"));
+                                    }
+                                });
+                        }
+                        else
+                        {
+                            reject(new Error("LOGIN_ERROR_1"));
+                        }
+                    });
+
+
+                })
+                .then(loginResponse =>
+                {
+                    sendResponse(resp, loginResponse);
+                })
+                .catch((e:Error) =>
+                {
+                    sendResponse(resp, {error:e.message});
+                });
+            }
+
             break;
         }
 
@@ -66,23 +147,16 @@ function onRequest(request:IncomingMessage, response:ServerResponse)
             if (queryObject.q)
             {
                 const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
-                parseSearch(queryString, response);
+                parseSearch(queryString, resp);
             }
             else
             {
-                response.end();
+                resp.end();
             }
+
             break;
         }
     }
-}
-
-
-function login(request:IncomingMessage)
-{
-    const data = request.read();
-    console.log(data);
-    debugger;
 }
 
 
