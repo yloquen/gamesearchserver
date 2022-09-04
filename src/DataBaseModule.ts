@@ -87,7 +87,7 @@ export default class DataBaseModule
                 {
                     link:dbResponse[0]?.link,
                     imgURL:dbResponse[0]?.img,
-                    textInfo:JSON.parse(dbResponse[0]?.text_info)
+                    textInfo:JSON.parse(dbResponse[0]?.text_info || "[]")
                 };
 
                 const q = `SELECT video_id FROM videoresults WHERE search_id = ?;`;
@@ -185,7 +185,6 @@ export default class DataBaseModule
             {
                 this.connection.query(mysql.format(q, [values]), (error, results) =>
                 {
-                    debugger;
                     if (error)
                     {
                         reject(error);
