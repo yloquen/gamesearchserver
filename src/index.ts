@@ -17,6 +17,7 @@ const http = require('http');
 const url = require('url');
 const crypto = require('crypto');
 
+console.log("Starting server at 8080");
 http.createServer(onRequest).listen(8080);
 
 const db = new DataBaseModule();
