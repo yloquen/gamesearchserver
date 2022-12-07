@@ -21,3 +21,10 @@ export type SearchResult =
     wikiData:WikiData,
     videoId:string
 };
+
+
+export type ErrorData =
+{
+    type:number,
+    id:number
+}

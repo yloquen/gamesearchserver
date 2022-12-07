@@ -8,9 +8,12 @@ import YouTubeComm from "./comm/YouTubeComm";
 import BazarComm from "./comm/BazarComm";
 import DataBaseModule from "./DataBaseModule";
 import C_Config from "./C_Config";
-import {SearchResult} from "./types";
+import {ErrorData, SearchResult} from "./types";
 import {IncomingMessage, ServerResponse} from "http";
-import {debug} from "util";
+import {E_ErrorType, E_GenericError, E_LoginError, E_RegisterError} from "./const/enums";
+import {generatePassHash, sendEmail, validateEmail, validatePass} from "./util/Util";
+import {Buffer} from "buffer";
+import {generateHS256Token, verifyToken} from "./JWTUtil";
 
 
 const http = require('http');
@@ -24,10 +27,14 @@ const db = new DataBaseModule();
 const activeSessions:Record<number, any> = {};
 
 
+// const jwToken = generateHS256Token({sub:1});
+// const result = verifyToken("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjF9.VH0PNb2_RIc5BYsGqFBqgyhIQ7g2oPyxg75PUWOF2fQ");
+// console.log(result);
+
 function sendResponse(response:ServerResponse, data:any)
 {
     response.setHeader('Content-Type', 'application/json');
-    response.setHeader('Access-Control-Allow-Origin', 'http://localhost:8081');
+    response.setHeader('Access-Control-Allow-Origin', 'http://192.168.0.152:8081');
     response.setHeader('Access-Control-Allow-Credentials', 'true');
     response.write(JSON.stringify(data));
     response.end();
@@ -75,70 +82,66 @@ function onRequest(req:IncomingMessage, resp:ServerResponse)
     }
 }
 
-function processRequest(req:IncomingMessage, resp:ServerResponse, data:any = undefined)
+async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any = undefined)
 {
     const parsedUrl = url.parse(req.url, true);
     const queryObject = parsedUrl.query;
 
+    console.log(parsedUrl.pathname + " @ " + new Date().getTime());
+
+    const cookies = parseCookies(req);
+    const sid = cookies.sid;
+    let userId = null;
+    if (sid && activeSessions[sid])
+    {
+        userId = activeSessions[sid].id;
+    }
+
     switch (parsedUrl.pathname)
     {
+
         case "/login":
         {
-            const cookies = parseCookies(req);
-            const sid = cookies.sid;
-            if (sid && activeSessions[sid])
+            if (userId !== null)
             {
                 sendResponse(resp, {email:activeSessions[sid].email});
             }
             else
             {
-                db.getUserData(data.email).then((d:any[]) =>
+                const d:any[] = await db.getUserData(data.email);
+                if (d.length === 1)
                 {
-                    return new Promise((resolve:Function, reject:Function) =>
+                    const hash = await generatePassHash(data.pass, d[0].salt);
+                    if (d[0].passhash === hash)
                     {
-                        if (d.length === 1)
-                        {
-                            crypto.pbkdf2(data.pass, d[0].salt, 100000, 64,
-                                'sha512', (err:any, derivedKey:Buffer) => {
-
-                                    if (err)
-                                    {
-                                        reject(new Error("LOGIN_ERROR_2"));
-                                    }
-                                    // Prints derivedKey
-                                    const h = derivedKey.toString('base64');
-
-                                    if (d[0].passhash === h)
-                                    {
-                                        // sm.createSession();
-                                        const sid = crypto.randomBytes(32).toString('base64');
-                                        activeSessions[sid] = { id:d[0].id, email:data.email };
-                                        resp.setHeader("Set-Cookie", `sid=${sid}; Max-Age=3600`);
-                                        resolve({email:data.email});
-                                    }
-                                    else
-                                    {
-                                        reject(new Error("LOGIN_ERROR_3"));
-                                    }
-                                });
-                        }
-                        else
-                        {
-                            reject(new Error("LOGIN_ERROR_1"));
-                        }
-                    });
-
-
-                })
-                .then(loginResponse =>
+                        const sid = crypto.randomBytes(32).toString('base64');
+                        activeSessions[sid] = { id:d[0].id, email:data.email };
+                        resp.setHeader("Set-Cookie", `sid=${sid}; Max-Age=3600; HttpOnly;`);
+                        sendResponse(resp, {email:data.email});
+                    }
+                    else
+                    {
+                        sendResponse(resp, {error:{type:E_ErrorType.LOGIN, id:E_LoginError.WRONG_PASSWORD}});
+                    }
+                }
+                else
                 {
-                    sendResponse(resp, loginResponse);
-                })
-                .catch((e:Error) =>
-                {
-                    sendResponse(resp, {error:e.message});
-                });
+                    sendResponse(resp, {type:E_ErrorType.LOGIN, id:E_LoginError.USER_NOT_FOUND});
+                }
             }
+
+            break;
+        }
+
+        case "/search_history":
+        {
+            if (!userId)
+            {
+                break;
+            }
+
+            const result = await db.findUserSearches(userId);
+            sendResponse(resp, result);
 
             break;
         }
@@ -148,7 +151,7 @@ function processRequest(req:IncomingMessage, resp:ServerResponse, data:any = und
             if (queryObject.q)
             {
                 const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
-                parseSearch(queryString, resp);
+                parseSearch(queryString, userId, resp);
             }
             else
             {
@@ -157,11 +160,104 @@ function processRequest(req:IncomingMessage, resp:ServerResponse, data:any = und
 
             break;
         }
+
+
+        case "/verify":
+        {
+            if (queryObject.token)
+            {
+                db.verifyUser(queryObject.token);
+            }
+            break;
+        }
+
+        case "/logout":
+        {
+            if (sid && activeSessions[sid])
+            {
+                delete activeSessions[sid];
+            }
+
+            sendResponse(resp, {success:true});
+
+            break;
+        }
+
+        case "/register":
+        {
+            if (!data.hasOwnProperty("email") || !data.hasOwnProperty("pass"))
+            {
+                sendResponse(resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_DATA}});
+            }
+            else if (!validateEmail(data.email))
+            {
+                sendResponse(resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_EMAIL}});
+            }
+            else if (!validatePass(data.pass))
+            {
+                sendResponse(resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_PASS}});
+            }
+            else
+            {
+                const result = await createUser(data.email, data.pass);
+                sendResponse(resp, result);
+            }
+
+            break;
+        }
     }
 }
 
 
-function parseSearch(queryString:string, response:ServerResponse)
+// db.createUser("c", "c", "c", "c");
+
+async function createUser(email:string, pass:string):Promise<any>
+{
+    let result, dBdata;
+
+    try
+    {
+        dBdata = await db.getUserData(email);
+
+        if (dBdata.length === 0)
+        {
+            const salt = crypto.randomBytes(16).toString('base64');
+            let passHash;
+
+            try
+            {
+                passHash = await generatePassHash(pass, salt);
+
+                const verifyToken = crypto.randomBytes(64).toString('base64');
+                await db.createUser(email, passHash, salt, verifyToken);
+
+                const url = "http://192.168.0.152/verify?token=" + verifyToken;
+
+                const emailText = "Copy and paste this link in the browser address bar:\n" + url;
+
+                await sendEmail(email, "Verify your GameSearch account", emailText);
+                result = {success:true};
+            }
+            catch (e)
+            {
+                result = {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.CREATE_USER, msg:e}};
+            }
+        }
+        else
+        {
+            result = {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.USER_EXISTS}};
+        }
+    }
+    catch (e)
+    {
+        result = {error:{type:E_ErrorType.GENERIC, id:E_GenericError.DATABASE}};
+    }
+
+    return result;
+}
+
+
+function parseSearch(queryString:string, userId:number, response:ServerResponse)
 {
     db.getCachedQuery(queryString)
         .then((searchResults:SearchResult) =>
@@ -208,11 +304,22 @@ function parseSearch(queryString:string, response:ServerResponse)
                 })
                 .then(() =>
                 {
-                    return db.add(queryString, searchResult);
+                    return db.add(queryString, searchResult, userId);
                 })
                 .then(() =>
                 {
                     sendResponse(response, searchResult);
-                });
+                })
+                .catch((e:Error) =>
+                {
+                    console.log(e.message);
+                    console.log(e.stack);
+                })
         });
 }
+
+
+
+
+
+

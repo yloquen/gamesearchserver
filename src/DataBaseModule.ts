@@ -2,6 +2,8 @@ import {credentials} from "./cred";
 import {GameData, SearchResult} from "./types";
 import {Connection, MysqlError, OkPacket} from "mysql";
 import C_Config from "./C_Config";
+import {E_ErrorType, E_GenericError} from "./const/enums";
+
 const mysql = require('mysql');
 
 
@@ -11,8 +13,39 @@ export default class DataBaseModule
 
     constructor()
     {
-        this.connection = mysql.createConnection(credentials);
+        // this.connection = mysql.createConnection(credentials);
+        this.connection = this.createConnection();
         // this.connection.connect();
+    }
+
+
+    createConnection()
+    {
+        const connection = mysql.createConnection(credentials);
+
+        connection.connect((err:any) =>
+        {
+            if(err)
+            {
+                console.log('error when connecting to db:', err);
+                setTimeout(() => { this.createConnection() }, 2000);
+            }
+        });
+
+        connection!.on('error', (err:any) =>
+        {
+            console.log('db error', err);
+            if(err.code === 'PROTOCOL_CONNECTION_LOST')
+            {
+                this.createConnection();
+            }
+            else
+            {
+                throw err;
+            }
+        });
+
+        return connection;
     }
 
 
@@ -23,6 +56,48 @@ export default class DataBaseModule
         {
             return dbResponse;
         });
+    }
+
+
+    createUser(email:string, hash:string, salt:string, verifyToken:string):Promise<any>
+    {
+        return new Promise<any>((resolve, reject) =>
+        {
+            this.connection.beginTransaction(async (err:MysqlError) =>
+            {
+                if (err)
+                {
+                    reject(err);
+                }
+                else
+                {
+                    try
+                    {
+                        let q = "INSERT INTO user VALUES ?;";
+                        let vals = [ null, email, hash, salt, 0];
+
+                        await this.executeQuery(q, [vals]);
+
+                        q = "INSERT INTO verify VALUES (LAST_INSERT_ID(), ?);";
+                        vals = [email, verifyToken];
+
+                        await this.executeQuery(q, vals);
+
+                        this.connection.commit();
+
+                        resolve(true);
+                    }
+                    catch (e)
+                    {
+                        this.connection.rollback();
+                        reject(e);
+                    }
+                }
+            });
+        });
+
+
+
     }
 
 
@@ -106,7 +181,7 @@ export default class DataBaseModule
     }
 
 
-    add(queryString:string, results:SearchResult):Promise<any>
+    add(queryString:string, results:SearchResult, userId:number):Promise<any>
     {
         return new Promise<any>((resolve, reject) =>
         {
@@ -120,7 +195,7 @@ export default class DataBaseModule
                 {
                     const q = "INSERT INTO searches VALUES ?;";
                     let searchId:number;
-                    this.executeQuery(q, [[null, queryString, null]])
+                    this.executeQuery(q, [[null, queryString, null, userId]])
                         .then((r:OkPacket) =>
                         {
                             searchId = r.insertId;
@@ -203,5 +278,27 @@ export default class DataBaseModule
     }
 
 
+    verifyUser(token:string)
+    {
 
+    }
+
+
+    async findUserSearches(userId:any)
+    {
+        const q = "SELECT query_string FROM searches where user_id = ?;";
+
+        let result;
+        try
+        {
+            result = await this.executeQuery(q, [userId]);
+            result = result.map((r:any) => r.query_string)
+        }
+        catch (e)
+        {
+            result = {error:{type:E_ErrorType.GENERIC, id:E_GenericError.DATABASE}};
+        }
+
+        return result;
+    }
 }

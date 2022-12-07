@@ -1,0 +1,27 @@
+export enum E_ErrorType
+{
+    LOGIN,
+    REGISTER,
+    GENERIC
+}
+
+export enum E_RegisterError
+{
+    CREATE_USER,
+    INVALID_DATA,
+    INVALID_EMAIL,
+    INVALID_PASS,
+    USER_EXISTS
+}
+
+export enum E_LoginError
+{
+    WRONG_PASSWORD,
+    USER_NOT_FOUND
+}
+
+export enum E_GenericError
+{
+    DATABASE,
+    CRYPTO
+}
