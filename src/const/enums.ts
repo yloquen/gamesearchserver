@@ -22,6 +22,7 @@ export enum E_LoginError
 
 export enum E_GenericError
 {
+    NOT_LOGGED_IN,
     DATABASE,
     CRYPTO
 }

@@ -23,6 +23,7 @@ const payload =
 };
 resp.setHeader("Authorization", `Bearer ${generateHS256Token(payload)}`);
 */
+
 export function generateHS256Token<T>(payload: T)
 {
     const payloadB64url = Buffer

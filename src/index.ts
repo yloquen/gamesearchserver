@@ -137,6 +137,7 @@ async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any
         {
             if (!userId)
             {
+                sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.NOT_LOGGED_IN}});
                 break;
             }
 

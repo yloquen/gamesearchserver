@@ -1,7 +1,7 @@
 import {GameData} from "../types";
 import {Buffer} from "buffer";
 
-const https = require("https");
+const { https } = require("follow-redirects");
 const crypto = require("crypto");
 const fs = require("fs");
 const sharp = require("sharp");
@@ -59,6 +59,9 @@ export default class Util
                     Util.loadUrlToBuffer(url)
                         .then((result:Buffer) =>
                         {
+                            console.log("Processing img from " + url);
+                            console.log(result);
+                            console.log("\n\n");
                             return sharp(result)
                                 .resize(size, size, {fit:'contain', background:{r:255, g:255, b:255, alpha:1}})
                                 .png()
@@ -66,7 +69,7 @@ export default class Util
                         })
                         .then((b:Buffer) =>
                         {
-
+                            console.log("Saving img from " + url);
                             fs.writeFile(filePath, b,
                                 ()=>
                                 {
@@ -75,6 +78,7 @@ export default class Util
                         })
                         .catch((e) =>
                         {
+                            console.log("Error saving:" + fileName);
                             resolve(fileName);
                         });
                 });
