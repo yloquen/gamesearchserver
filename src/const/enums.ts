@@ -22,6 +22,9 @@ export enum E_LoginError
 
 export enum E_GenericError
 {
+    GENERAL,
+    UNKNOWN_METHOD,
+    SEARCH_QUERY_NOT_PROVIDED,
     NOT_LOGGED_IN,
     DATABASE,
     CRYPTO

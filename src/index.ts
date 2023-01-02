@@ -1,7 +1,7 @@
 import BaseComm from "./comm/BaseComm";
 import OzoneComm from "./comm/OzoneComm";
 import TechnopolisComm from "./comm/TechnopolisComm";
-import Util from "./misc/Util";
+import Util from "./util/Util";
 import WikiComm from "./comm/WikiComm";
 import PriceChartingComm from "./comm/PriceChartingComm";
 import YouTubeComm from "./comm/YouTubeComm";
@@ -11,9 +11,10 @@ import C_Config from "./C_Config";
 import {ErrorData, SearchResult} from "./types";
 import {IncomingMessage, ServerResponse} from "http";
 import {E_ErrorType, E_GenericError, E_LoginError, E_RegisterError} from "./const/enums";
-import {generatePassHash, sendEmail, validateEmail, validatePass} from "./util/Util";
 import {Buffer} from "buffer";
 import {generateHS256Token, verifyToken} from "./JWTUtil";
+import OlxComm from "./comm/OlxComm";
+import OlxCrawler from "./crawlers/OlxCrawler";
 
 
 const http = require('http');
@@ -27,21 +28,22 @@ const db = new DataBaseModule();
 const activeSessions:Record<number, any> = {};
 
 
+const olxCrawler = new OlxCrawler(db);
+olxCrawler.run();
+
 // const jwToken = generateHS256Token({sub:1});
 // const result = verifyToken("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjF9.VH0PNb2_RIc5BYsGqFBqgyhIQ7g2oPyxg75PUWOF2fQ");
 // console.log(result);
 
+
 function sendResponse(response:ServerResponse, data:any)
 {
-    response.setHeader('Content-Type', 'application/json');
-    response.setHeader('Access-Control-Allow-Origin', 'http://192.168.0.152:8081');
-    response.setHeader('Access-Control-Allow-Credentials', 'true');
     response.write(JSON.stringify(data));
     response.end();
 }
 
 
-function parseCookies (req:IncomingMessage)
+function parseCookies(req:IncomingMessage)
 {
     const list:any = {};
     const cookieHeader = req.headers?.cookie;
@@ -61,6 +63,7 @@ function parseCookies (req:IncomingMessage)
     return list;
 }
 
+
 function onRequest(req:IncomingMessage, resp:ServerResponse)
 {
     let body = '';
@@ -73,17 +76,37 @@ function onRequest(req:IncomingMessage, resp:ServerResponse)
 
         req.on('end', () =>
         {
-            processRequest(req, resp, JSON.parse(body));
+            onReqReceived(req, resp, JSON.parse(body));
         });
     }
     else
     {
-        processRequest(req, resp);
+        onReqReceived(req, resp);
     }
 }
 
+
+
+function onReqReceived(req:IncomingMessage, resp:ServerResponse, data:any = undefined)
+{
+    try
+    {
+        processRequest(req, resp, data);
+    }
+    catch (e)
+    {
+        sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.GENERAL}});
+    }
+}
+
+
+
 async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any = undefined)
 {
+    resp.setHeader('Content-Type', 'application/json');
+    resp.setHeader('Access-Control-Allow-Origin', 'http://192.168.0.152:8081');
+    resp.setHeader('Access-Control-Allow-Credentials', 'true');
+
     const parsedUrl = url.parse(req.url, true);
     const queryObject = parsedUrl.query;
 
@@ -111,7 +134,7 @@ async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any
                 const d:any[] = await db.getUserData(data.email);
                 if (d.length === 1)
                 {
-                    const hash = await generatePassHash(data.pass, d[0].salt);
+                    const hash = await Util.generatePassHash(data.pass, d[0].salt);
                     if (d[0].passhash === hash)
                     {
                         const sid = crypto.randomBytes(32).toString('base64');
@@ -152,10 +175,18 @@ async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any
             if (queryObject.q)
             {
                 const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
-                parseSearch(queryString, userId, resp);
+                try
+                {
+                    parseSearch(decodeURIComponent(queryString), userId, resp);
+                }
+                catch (e)
+                {
+                    sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.GENERAL}});
+                }
             }
             else
             {
+                sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.SEARCH_QUERY_NOT_PROVIDED}});
                 resp.end();
             }
 
@@ -190,11 +221,11 @@ async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any
             {
                 sendResponse(resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_DATA}});
             }
-            else if (!validateEmail(data.email))
+            else if (!Util.validateEmail(data.email))
             {
                 sendResponse(resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_EMAIL}});
             }
-            else if (!validatePass(data.pass))
+            else if (!Util.validatePass(data.pass))
             {
                 sendResponse(resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_PASS}});
             }
@@ -206,11 +237,16 @@ async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any
 
             break;
         }
+
+        default:
+        {
+            sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.UNKNOWN_METHOD}});
+            break;
+        }
+
     }
 }
 
-
-// db.createUser("c", "c", "c", "c");
 
 async function createUser(email:string, pass:string):Promise<any>
 {
@@ -227,7 +263,7 @@ async function createUser(email:string, pass:string):Promise<any>
 
             try
             {
-                passHash = await generatePassHash(pass, salt);
+                passHash = await Util.generatePassHash(pass, salt);
 
                 const verifyToken = crypto.randomBytes(64).toString('base64');
                 await db.createUser(email, passHash, salt, verifyToken);
@@ -236,7 +272,7 @@ async function createUser(email:string, pass:string):Promise<any>
 
                 const emailText = "Copy and paste this link in the browser address bar:\n" + url;
 
-                await sendEmail(email, "Verify your GameSearch account", emailText);
+                await Util.sendEmail(email, "Verify your GameSleuth account", emailText);
                 result = {success:true};
             }
             catch (e)
@@ -258,65 +294,103 @@ async function createUser(email:string, pass:string):Promise<any>
 }
 
 
-function parseSearch(queryString:string, userId:number, response:ServerResponse)
+async function parseSearch2(queryString:string, userId:number, response:ServerResponse)
 {
-    db.getCachedQuery(queryString)
-        .then((searchResults:SearchResult) =>
-        {
-            sendResponse(response, searchResults);
-        })
-        .catch(() =>
-        {
-            const communicators:BaseComm[] =
-                [
-                    new TechnopolisComm(),
-                    new OzoneComm(),
-                    new BazarComm()
-                ];
+    let searchResults:SearchResult|undefined = await db.getCachedQuery(queryString);
 
-            const commPromises:Promise<any>[] = communicators.map(comm =>
-            {
-                return comm.getData(queryString);
-            });
+    if (searchResults)
+    {
+        sendResponse(response, searchResults);
+        return;
+    }
 
-            const searchWords = Util.toSearchWords(queryString);
+    const communicators:BaseComm[] =
+    [
+        new TechnopolisComm(),
+        new OzoneComm(),
+        new BazarComm(),
+        new OlxComm()
+    ];
 
-            const pcPromise = new PriceChartingComm().getData(searchWords, queryString);
-            const wikiPromise = new WikiComm().getData(searchWords);
-            const ytPromise = new YouTubeComm().getData(searchWords);
+    const commPromises:Promise<any>[] = communicators.map(comm =>
+    {
+        return comm.getData(queryString);
+    });
 
-            const allPromises:Promise<any>[] = commPromises.concat([pcPromise, wikiPromise, ytPromise]);
+    const searchWords = Util.toSearchWords(queryString);
 
-            let searchResult:SearchResult;
+    const pcPromise = new PriceChartingComm().getData(searchWords, queryString);
+    const wikiPromise = new WikiComm().getData(searchWords);
+    const ytPromise = new YouTubeComm().getData(searchWords);
 
-            Promise.all(allPromises)
-                .then((results:any[]) =>
-                {
-                    const wikiResult = results[allPromises.indexOf(wikiPromise)];
-                    const ytResult = results[allPromises.indexOf(ytPromise)];
+    const allPromises:Promise<any>[] = commPromises.concat([pcPromise, wikiPromise, ytPromise]);
 
-                    searchResult =
-                        {
-                            gameData:results.slice(0, commPromises.length).flat(),
-                            priceData:results[allPromises.indexOf(pcPromise)],
-                            wikiData:wikiResult,
-                            videoId:ytResult.videoId
-                        };
-                })
-                .then(() =>
-                {
-                    return db.add(queryString, searchResult, userId);
-                })
-                .then(() =>
-                {
-                    sendResponse(response, searchResult);
-                })
-                .catch((e:Error) =>
-                {
-                    console.log(e.message);
-                    console.log(e.stack);
-                })
-        });
+    const results:any[] = await Promise.all(allPromises);
+
+    const wikiResult = results[allPromises.indexOf(wikiPromise)];
+    const ytResult = results[allPromises.indexOf(ytPromise)];
+
+    const searchResult =
+    {
+        gameData:results.slice(0, commPromises.length).flat(),
+        priceData:results[allPromises.indexOf(pcPromise)],
+        wikiData:wikiResult,
+        videoId:ytResult?.videoId
+    };
+
+    // await db.add(queryString, searchResult, userId);
+    sendResponse(response, searchResult);
+}
+
+
+async function parseSearch(queryString:string, userId:number, response:ServerResponse)
+{
+    let searchResults:SearchResult|undefined = await db.getCachedQuery(queryString);
+
+    if (searchResults)
+    {
+        sendResponse(response, searchResults);
+        return;
+    }
+
+/*    const communicators:BaseComm[] =
+    [
+        new TechnopolisComm(),
+        new OzoneComm(),
+        new BazarComm(),
+        new OlxComm()
+    ];
+
+    const commPromises:Promise<any>[] = communicators.map(comm =>
+    {
+        return comm.getData(queryString);
+    });*/
+
+    const searchWords = Util.toSearchWords(queryString);
+
+    const gameData = await db.getGames(searchWords);
+
+    const pcPromise = new PriceChartingComm().getData(searchWords, queryString);
+    const wikiPromise = new WikiComm().getData(searchWords);
+    const ytPromise = new YouTubeComm().getData(searchWords);
+
+    const allPromises:Promise<any>[] = [pcPromise, wikiPromise, ytPromise];
+
+    const results:any[] = await Promise.all(allPromises);
+
+    const wikiResult = results[allPromises.indexOf(wikiPromise)];
+    const ytResult = results[allPromises.indexOf(ytPromise)];
+
+    const searchResult =
+    {
+        gameData:gameData,
+        priceData:results[allPromises.indexOf(pcPromise)],
+        wikiData:wikiResult,
+        videoId:ytResult?.videoId
+    };
+
+    // await db.add(queryString, searchResult, userId);
+    sendResponse(response, searchResult);
 }
 
 

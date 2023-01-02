@@ -3,6 +3,7 @@ import {GameData, SearchResult} from "./types";
 import {Connection, MysqlError, OkPacket} from "mysql";
 import C_Config from "./C_Config";
 import {E_ErrorType, E_GenericError} from "./const/enums";
+import Util from "./util/Util";
 
 const mysql = require('mysql');
 
@@ -37,6 +38,7 @@ export default class DataBaseModule
             console.log('db error', err);
             if(err.code === 'PROTOCOL_CONNECTION_LOST')
             {
+                console.log("Connection lost, trying to reconnect");
                 this.createConnection();
             }
             else
@@ -101,159 +103,133 @@ export default class DataBaseModule
     }
 
 
-    getCachedQuery(queryString:string):Promise<SearchResult>
+    async getCachedQuery(queryString:string):Promise<SearchResult|undefined>
     {
-        return new Promise<any>((resolve, reject) =>
+        const responseData:SearchResult =
         {
-            const responseData:SearchResult =
-            {
-                gameData:[],
-                priceData:[],
-                wikiData:{link:"", imgURL:"", textInfo:[]},
-                videoId:""
-            };
-            let searchId:number;
-            const q = `SELECT id, search_date FROM searches WHERE query_string = ?`;
-            this.executeQuery(q, [queryString]).then((dbResponse:any[]) =>
-            {
-                if (dbResponse.length !== 1)
-                {
-                    throw new Error("Cached version not found");
-                }
-                else
-                {
-                    return dbResponse;
-                }
-            })
-            .then((dbResponse:any[]) =>
-            {
-                searchId = dbResponse[0].id;
-                const secondsSinceSearch = (new Date().getTime() - new Date(dbResponse[0].search_date).getTime())*.001;
-                let query;
-                if (secondsSinceSearch > C_Config.CACHE_DURATION_SECONDS)
-                {
-                    query = `DELETE FROM searches WHERE id = ?`;
-                }
-                else
-                {
-                    query = `SELECT img, link, price, name, provider FROM gameresults WHERE search_id = ?;`;
-                }
-                return this.executeQuery(query, [searchId])
-            })
-            .then((dbResponse:any) =>
-            {
-                if (!(dbResponse instanceof Array))
-                {
-                    throw new Error("Cached version expired");
-                }
-                responseData.gameData = dbResponse;
-                const q = `SELECT link, price, name FROM priceresults WHERE search_id = ?;`;
-                return this.executeQuery(q, [searchId])
-            })
-            .then((dbResponse:any[]) =>
-            {
-                responseData.priceData = dbResponse;
-                const q = `SELECT img, text_info, link FROM wikiresults WHERE search_id = ?;`;
-                return this.executeQuery(q, [searchId]);
-            })
-            .then((dbResponse:any[]) =>
-            {
-                responseData.wikiData =
-                {
-                    link:dbResponse[0]?.link,
-                    imgURL:dbResponse[0]?.img,
-                    textInfo:JSON.parse(dbResponse[0]?.text_info || "[]")
-                };
+            gameData:[],
+            priceData:[],
+            wikiData:{link:"", imgURL:"", textInfo:[]},
+            videoId:""
+        };
 
-                const q = `SELECT video_id FROM videoresults WHERE search_id = ?;`;
-                return this.executeQuery(q, [searchId]);
-            })
-            .then((dbResponse:any[]) =>
-            {
-                responseData.videoId = dbResponse[0]?.video_id;
-                resolve(responseData);
-            })
-            .catch((e:Error) =>
-            {
-                reject(e);
-            })
-        });
+        let query = `SELECT id, search_date FROM searches WHERE query_string = ?`;
+        let dbResponse:any[] = await this.executeQuery(query, [queryString]);
+
+        if (dbResponse.length === 0)
+        {
+            return;
+        }
+
+        const searchId = dbResponse[0].id;
+        const secondsSinceSearch = (new Date().getTime() - new Date(dbResponse[0].search_date).getTime())*.001;
+
+        if (secondsSinceSearch > C_Config.CACHE_DURATION_SECONDS)
+        {
+            query = `DELETE FROM searches WHERE id = ?`;
+            await this.executeQuery(query, [searchId]);
+
+            return;
+        }
+
+        query = `SELECT id, img, link, price, name, provider FROM gameresults WHERE search_id = ?;`;
+        responseData.gameData = await this.executeQuery(query, [searchId]);
+
+        query = `SELECT link, price, name FROM priceresults WHERE search_id = ?;`;
+        responseData.priceData = await this.executeQuery(query, [searchId]);
+
+        query = `SELECT img, text_info, link FROM wikiresults WHERE search_id = ?;`;
+        dbResponse = await this.executeQuery(query, [searchId]);
+
+        responseData.wikiData =
+        {
+            link:dbResponse[0]?.link,
+            imgURL:dbResponse[0]?.img,
+            textInfo:JSON.parse(dbResponse[0]?.text_info || "[]")
+        };
+
+        query = `SELECT video_id FROM videoresults WHERE search_id = ?;`;
+        dbResponse = await this.executeQuery(query, [searchId]);
+        responseData.videoId = dbResponse[0]?.video_id;
+
+        return responseData;
     }
+
 
 
     add(queryString:string, results:SearchResult, userId:number):Promise<any>
     {
         return new Promise<any>((resolve, reject) =>
         {
-            this.connection.beginTransaction((err:MysqlError) =>
+            this.connection.beginTransaction(async (err:MysqlError) =>
             {
                 if (err)
                 {
+                    this.connection.rollback();
                     reject(err);
                 }
                 else
                 {
-                    const q = "INSERT INTO searches VALUES ?;";
-                    let searchId:number;
-                    this.executeQuery(q, [[null, queryString, null, userId]])
-                        .then((r:OkPacket) =>
-                        {
-                            searchId = r.insertId;
-                            const q = "INSERT INTO gameresults VALUES ?;";
-                            const vals = results.gameData.map(d =>
-                                [null, searchId, d.link, d.img, d.name, d.provider, d.price || null]);
-                            return vals.length > 0 ? this.executeQuery(q, vals) : undefined;
-                        })
-                        .then(() =>
-                        {
-                            const q = "INSERT INTO priceresults VALUES ?;";
-                            const vals = results.priceData.map(d =>
-                                [null, searchId, d.link, d.name, d.price || null]);
-
-                            return vals.length > 0 ? this.executeQuery(q, vals) : undefined;
-                        })
-                        .then(() =>
-                        {
-                            const q = "INSERT INTO wikiresults VALUES ?;";
-                            const vals = [[
-                                null,
-                                searchId,
-                                results.wikiData.link,
-                                results.wikiData.imgURL,
-                                JSON.stringify(results.wikiData.textInfo)
-                            ]];
-                            return this.executeQuery(q, vals);
-                        })
-                        .then(() =>
-                        {
-                            const q = "INSERT INTO videoresults VALUES ?;";
-                            const vals = [[null, searchId, results.videoId]];
-                            return this.executeQuery(q, vals);
-                        })
-                        .then((r:any) =>
-                        {
-                            this.connection.commit();
-                            resolve(undefined);
-                        })
-                        .catch((e) =>
-                        {
-                            this.connection.rollback();
-                            reject(e);
-                        })
-                        .finally(() =>
-                        {
-
-                        });
+                    try
+                    {
+                        const r = await this.saveGameData(queryString, results, userId);
+                        this.connection.commit();
+                        resolve(r)
+                    }
+                    catch(e)
+                    {
+                        this.connection.rollback();
+                        reject(e);
+                    }
                 }
             });
-
-
         });
+    }
+
+
+    async saveGameData(queryString:string, results:SearchResult, userId:number)
+    {
+        const searchesQuery = "INSERT INTO searches VALUES ?;";
+        const searchesResult = await this.executeQuery(searchesQuery, [[null, queryString, null, userId]]);
+
+        let searchId:number = searchesResult.insertId;
+
+        const gameQuery = "INSERT INTO gameresults VALUES ?;";
+        const gameValues = results.gameData.map(d =>
+        {
+            return [null, searchId, d.link, d.img, Util.sanitizeStringForDB(d.name, 100), d.provider, d.price || null]
+        });
+        const gameResults = await this.executeQuery(gameQuery, gameValues);
+        results.gameData.forEach((gameData, idx) => {gameData.id = gameResults.insertId + idx; });
+
+        const priceQuery = "INSERT INTO priceresults VALUES ?;";
+        const priceValues = results.priceData.map(d => [null, searchId, d.link, d.name, d.price || null]);
+        await this.executeQuery(priceQuery, priceValues);
+
+        const q4 = "INSERT INTO wikiresults VALUES ?;";
+        const vals4 = [[
+            null,
+            searchId,
+            results.wikiData.link,
+            results.wikiData.imgURL,
+            JSON.stringify(results.wikiData.textInfo)
+        ]];
+        await this.executeQuery(q4, vals4);
+
+        const q5 = "INSERT INTO videoresults VALUES ?;";
+        const vals = [[null, searchId, results.videoId]];
+        await this.executeQuery(q5, vals);
     }
 
 
     executeQuery(q:string, values:any[]):Promise<any>
     {
+        console.log(q + " " +  values.length);
+        if (values.length === 0)
+        {
+            return Promise.resolve();
+        }
+
         return new Promise((resolve, reject) =>
         {
             try
@@ -301,4 +277,13 @@ export default class DataBaseModule
 
         return result;
     }
+
+
+    getGames(searchWords:string[])
+    {
+        const q = "SELECT id, img, link, price, name, provider FROM crawl_gameresults where MATCH(name) AGAINST(? IN BOOLEAN MODE)";
+        return this.executeQuery(q, ["+" + searchWords.join(" +")]);
+    }
+
+
 }

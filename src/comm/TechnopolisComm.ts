@@ -4,7 +4,7 @@ const http = require("http");
 const https = require("https");
 
 import { parse } from 'node-html-parser';
-import Util from "../misc/Util";
+import Util from "../util/Util";
 const sharp = require("sharp");
 
 export default class TechnopolisComm extends BaseComm
@@ -33,10 +33,10 @@ export default class TechnopolisComm extends BaseComm
                         {
                             resolve({
                                 name:li.querySelector(".modal-header")?.querySelector("strong")?.rawText || "",
-                                price:Number(li.querySelector(".price-value")?.rawText),
+                                price:Number(li.querySelector(".product-box__price-value")?.rawText),
                                 provider:"Technopolis",
                                 img:fileName,
-                                link:baseUrl + (li.querySelector(".preview")?.querySelector("a")?.getAttribute("data-src") || "")
+                                link:baseUrl + (li.querySelector(".product-box__title a")?.attributes.href || "")
                             });
                         })
                         .catch((e) => {reject(e)});
@@ -49,9 +49,11 @@ export default class TechnopolisComm extends BaseComm
 
     generateUrl(searchString:string)
     {
-        return "https://www.technopolis.bg/bg/search/?query=" +
+        return "https://www.technopolis.bg/bg/search?text=" +
         searchString +
-        "&query_autocomplete=&search_main_category=ALL";
+        "&pageselect=30&pricerange=&attr-0-1=%d0%98%d0%b3%d1%80%d0%b8&layout=Grid&sort=relevance&q=" +
+        searchString +
+        "%3Arelevance%3Acategory%3AP11030301";
     }
 
 

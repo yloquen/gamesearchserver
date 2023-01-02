@@ -1,6 +1,6 @@
 import {GameData} from "../types";
 import BaseComm from "./BaseComm";
-import Util from "../misc/Util";
+import Util from "../util/Util";
 import {Buffer} from "buffer";
 import {parse} from "node-html-parser";
 

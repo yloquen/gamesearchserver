@@ -1,6 +1,6 @@
 import {GameData, WikiData} from "../types";
 import BaseComm from "./BaseComm";
-import Util from "../misc/Util";
+import Util from "../util/Util";
 import {Buffer} from "buffer";
 import HTMLElement from "node-html-parser/dist/nodes/html";
 import {parse} from "node-html-parser";
@@ -38,7 +38,7 @@ export default class WikiComm
                     }
                     else
                     {
-                        reject();
+                        resolve(undefined);
                     }
                 })
                 .then((data:any) =>
@@ -102,7 +102,7 @@ export default class WikiComm
                 })
                 .catch((data) =>
                 {
-                    reject({});
+                    resolve(undefined);
                 });
         });
     }

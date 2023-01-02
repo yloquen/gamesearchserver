@@ -4,8 +4,24 @@ export type GameData =
     price:number,
     provider:string,
     link:string,
-    img:string
+    img:string,
+    id?:number
 };
+
+
+
+export type NewGameData =
+{
+    name:string,
+    price:number,
+    provider:string,
+    link:string,
+    img:string,
+    vendor_id:number,
+    expires_at:string
+};
+
+
 
 export type WikiData =
 {
