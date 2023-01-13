@@ -45,7 +45,7 @@ export default class Util
         return new Promise<string>((resolve, reject) =>
         {
             const shaHash = crypto.createHash("sha256").update(url).digest("hex");
-            const fileName = shaHash + ".png";
+            const fileName = shaHash + ".jpg";
             const filePath = "./cache/" + fileName;
 
             fs.promises.access(filePath, fs.F_OK)
@@ -62,7 +62,7 @@ export default class Util
                         {
                             return sharp(result)
                                 .resize(size, size, {fit:'contain', background:{r:255, g:255, b:255, alpha:1}})
-                                .png()
+                                .jpeg({quality:70})
                                 .toBuffer();
                         })
                         .then((b:Buffer) =>
@@ -90,7 +90,7 @@ export default class Util
 
 
     // Returns true only if all words in query are contained in name
-    public static filterFullyContained(name:string, query:string)
+    public static isFullyContained(name:string, query:string)
     {
         const nameWords = Util.toSearchWords(name);
         const queryWords = Util.toSearchWords(query);
@@ -105,6 +105,12 @@ export default class Util
         }
 
         return true;
+    }
+
+
+    public static allWordsContainedInString(words:string[], searchString:string)
+    {
+        return words.reduce((prev:boolean, word:string) => searchString.indexOf(word) !== -1 && prev, true);
     }
 
 
@@ -213,5 +219,17 @@ export default class Util
         {
             setTimeout(()=>resolve(undefined), number * 1000);
         })
+    }
+
+    static dateToMySqlFormat(date:Date)
+    {
+        return date.toISOString().slice(0, 19).replace('T', ' ');
+    }
+
+
+    public static async delayedPromise<T>(p:() => Promise<T>, delay:number):Promise<T>
+    {
+        await Util.delay(delay);
+        return await p();
     }
 }

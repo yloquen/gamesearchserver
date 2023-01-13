@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "ts-node ./src/index.ts"
+    "dev": "ts-node ./src/index.ts",
+    "crawlers": "ts-node ./src/crawlers.ts"
   },
   "repository": {
     "type": "git",

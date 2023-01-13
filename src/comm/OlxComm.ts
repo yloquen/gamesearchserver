@@ -19,7 +19,7 @@ export default class OlxComm extends BaseComm
         const fullList = root.querySelectorAll(".listing-grid-container a").filter(n =>
         {
             const name = n.querySelector("h6")?.rawText;
-            return (name && Util.filterFullyContained(Util.removeWhitespaces(name), query))
+            return (name && Util.isFullyContained(Util.removeWhitespaces(name), query))
         });
 
         const promises:Promise<GameData>[] =

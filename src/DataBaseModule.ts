@@ -2,7 +2,7 @@ import {credentials} from "./cred";
 import {GameData, SearchResult} from "./types";
 import {Connection, MysqlError, OkPacket} from "mysql";
 import C_Config from "./C_Config";
-import {E_ErrorType, E_GenericError} from "./const/enums";
+import {E_DatabaseError, E_ErrorType, E_GenericError} from "./const/enums";
 import Util from "./util/Util";
 
 const mysql = require('mysql');
@@ -36,6 +36,7 @@ export default class DataBaseModule
         connection!.on('error', (err:any) =>
         {
             console.log('db error', err);
+            debugger;
             if(err.code === 'PROTOCOL_CONNECTION_LOST')
             {
                 console.log("Connection lost, trying to reconnect");
@@ -132,7 +133,7 @@ export default class DataBaseModule
             return;
         }
 
-        query = `SELECT id, img, link, price, name, provider FROM gameresults WHERE search_id = ?;`;
+        query = `SELECT id, img, link, price, name, provider FROM crawl_gameresults WHERE search_id = ?;`;
         responseData.gameData = await this.executeQuery(query, [searchId]);
 
         query = `SELECT link, price, name FROM priceresults WHERE search_id = ?;`;
@@ -193,14 +194,6 @@ export default class DataBaseModule
         const searchesResult = await this.executeQuery(searchesQuery, [[null, queryString, null, userId]]);
 
         let searchId:number = searchesResult.insertId;
-
-        const gameQuery = "INSERT INTO gameresults VALUES ?;";
-        const gameValues = results.gameData.map(d =>
-        {
-            return [null, searchId, d.link, d.img, Util.sanitizeStringForDB(d.name, 100), d.provider, d.price || null]
-        });
-        const gameResults = await this.executeQuery(gameQuery, gameValues);
-        results.gameData.forEach((gameData, idx) => {gameData.id = gameResults.insertId + idx; });
 
         const priceQuery = "INSERT INTO priceresults VALUES ?;";
         const priceValues = results.priceData.map(d => [null, searchId, d.link, d.name, d.price || null]);
@@ -281,9 +274,37 @@ export default class DataBaseModule
 
     getGames(searchWords:string[])
     {
-        const q = "SELECT id, img, link, price, name, provider FROM crawl_gameresults where MATCH(name) AGAINST(? IN BOOLEAN MODE)";
-        return this.executeQuery(q, ["+" + searchWords.join(" +")]);
+        // const q = "SELECT id, img, link, price, name, provider FROM crawl_gameresults where MATCH(name) AGAINST(? IN BOOLEAN MODE)";
+
+        const q = 'SELECT * FROM crawl_gameresults WHERE name LIKE ?';
+        return this.executeQuery(q, ["%" + searchWords.join("%") + "%"]);
     }
 
 
+    async addFavorite(prodId:any, userId:number)
+    {
+
+        if (isNaN(prodId))
+        {
+            return {error:{type:E_ErrorType.DATABASE, id:E_DatabaseError.ADD_FAVORITE_ERROR}};
+        }
+
+        // try
+        {
+
+            let q = "SELECT name FROM crawl_gameresults WHERE id = ?;";
+            const res = await this.executeQuery(q, [prodId]);
+
+            q = "INSERT INTO favorites VALUES ?;";
+            let vals = [ null, userId, prodId, res[0]?.name || ""];
+            await this.executeQuery(q, [vals]);
+        }
+
+        // catch (e)
+        // {
+        //     return {error:{type:E_ErrorType.DATABASE, id:E_DatabaseError.ADD_FAVORITE_ERROR}};
+        // }
+
+        return {success:true};
+    }
 }

@@ -6,9 +6,6 @@ import DataBaseModule from "../DataBaseModule";
 
 export default class OlxCrawler extends BaseCrawler
 {
-    private currentChunk:any;
-    private nextIndex:number = 0;
-    private vendorIds:any;
 
     constructor(db:DataBaseModule)
     {
@@ -18,25 +15,16 @@ export default class OlxCrawler extends BaseCrawler
 
     async run()
     {
-
-        this.nextIndex = 0;
-
-        const data = await this.db.executeQuery("SELECT vendor_id FROM crawl_gameresults WHERE provider = ?", [this.provider]);
-        this.vendorIds = {};
-        data.forEach((d:any) => { this.vendorIds[d.vendor_id] = 1});
-
         await this.loadNextChunk("https://www.olx.bg/api/v1/offers?offset=0&limit=50&category_id=636");
-
-        debugger;
     }
 
 
     async loadNextChunk(url:string)
     {
         const dataBuf = await Util.loadUrlToBuffer(url);
-        this.currentChunk = JSON.parse(dataBuf.toString());
+        const data = JSON.parse(dataBuf.toString());
 
-        let gameData:NewGameData[] = this.currentChunk.data.map((d:any) =>
+        let gameData:NewGameData[] = data.data.map((d:any) =>
         {
             const imgName = d.photos?.[0]?.filename;
             let imgLink = "";
@@ -53,62 +41,25 @@ export default class OlxCrawler extends BaseCrawler
             }
 
             return {
-                name:d.title,
+                name:Util.sanitizeStringForDB(d.title, 100),
                 price:price,
                 provider:this.provider,
                 img:imgLink,
                 link:d.url,
                 vendor_id:d.id,
-                expires_at:new Date(d.valid_to_time).toISOString().slice(0, 19).replace('T', ' ')
+                expires_at:Util.dateToMySqlFormat(new Date(d.valid_to_time))
             }
         });
 
-        const imgPromises = [];
-        for (let gameIdx = 0; gameIdx < gameData.length; gameIdx++)
-        {
-            const d = gameData[gameIdx];
+        await this.getImages(gameData);
+        await this.addDataToDB(gameData);
 
-            if (d.img)
-            {
-                imgPromises.push(Util.getImage(d.img));
-            }
-            else
-            {
-                imgPromises.push(Promise.resolve(null));
-            }
-        }
-
-        const imgNames = await Promise.all(imgPromises);
-
-        gameData.forEach((gd:any, idx:number) =>
-        {
-            gd.img = imgNames[idx];
-        });
-
-        const gameValues = gameData.map(d =>
-        {
-            return [null, d.link, d.img, Util.sanitizeStringForDB(d.name, 100), d.provider, d.price, d.vendor_id, d.expires_at ];
-        });
-
-        console.log(JSON.stringify(gameValues));
-
-        if (gameValues.length > 0)
-        {
-            await this.db.executeQuery("INSERT INTO crawl_gameresults VALUES ? ON DUPLICATE KEY UPDATE name = name;", gameValues);
-        }
-
-        const next = this.currentChunk.links?.next?.href;
+        const next = data.links?.next?.href;
         if (next)
         {
-            await Util.delay(3);
+            await Util.delay(1);
             await this.loadNextChunk(next);
         }
-    }
-
-
-    processResults()
-    {
-
     }
 
 }

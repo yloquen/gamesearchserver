@@ -15,6 +15,7 @@ import {Buffer} from "buffer";
 import {generateHS256Token, verifyToken} from "./JWTUtil";
 import OlxComm from "./comm/OlxComm";
 import OlxCrawler from "./crawlers/OlxCrawler";
+import TechnopolisCrawler from "./crawlers/TechnopolisCrawler";
 
 
 const http = require('http');
@@ -27,9 +28,6 @@ http.createServer(onRequest).listen(8080);
 const db = new DataBaseModule();
 const activeSessions:Record<number, any> = {};
 
-
-const olxCrawler = new OlxCrawler(db);
-olxCrawler.run();
 
 // const jwToken = generateHS256Token({sub:1});
 // const result = verifyToken("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjF9.VH0PNb2_RIc5BYsGqFBqgyhIQ7g2oPyxg75PUWOF2fQ");
@@ -87,14 +85,15 @@ function onRequest(req:IncomingMessage, resp:ServerResponse)
 
 
 
-function onReqReceived(req:IncomingMessage, resp:ServerResponse, data:any = undefined)
+async function onReqReceived(req:IncomingMessage, resp:ServerResponse, data:any = undefined)
 {
     try
     {
-        processRequest(req, resp, data);
+        await processRequest(req, resp, data);
     }
     catch (e)
     {
+        console.log("\n\nError:\n" + e);
         sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.GENERAL}});
     }
 }
@@ -187,8 +186,25 @@ async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any
             else
             {
                 sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.SEARCH_QUERY_NOT_PROVIDED}});
-                resp.end();
             }
+
+            break;
+        }
+
+
+        case "/favorite":
+        {
+            let result;
+            if (userId)
+            {
+                result = await db.addFavorite(data.id, userId);
+            }
+            else
+            {
+                result = {error:{type:E_ErrorType.GENERIC, id:E_GenericError.NOT_LOGGED_IN}};
+            }
+
+            sendResponse(resp, result);
 
             break;
         }
@@ -294,55 +310,6 @@ async function createUser(email:string, pass:string):Promise<any>
 }
 
 
-async function parseSearch2(queryString:string, userId:number, response:ServerResponse)
-{
-    let searchResults:SearchResult|undefined = await db.getCachedQuery(queryString);
-
-    if (searchResults)
-    {
-        sendResponse(response, searchResults);
-        return;
-    }
-
-    const communicators:BaseComm[] =
-    [
-        new TechnopolisComm(),
-        new OzoneComm(),
-        new BazarComm(),
-        new OlxComm()
-    ];
-
-    const commPromises:Promise<any>[] = communicators.map(comm =>
-    {
-        return comm.getData(queryString);
-    });
-
-    const searchWords = Util.toSearchWords(queryString);
-
-    const pcPromise = new PriceChartingComm().getData(searchWords, queryString);
-    const wikiPromise = new WikiComm().getData(searchWords);
-    const ytPromise = new YouTubeComm().getData(searchWords);
-
-    const allPromises:Promise<any>[] = commPromises.concat([pcPromise, wikiPromise, ytPromise]);
-
-    const results:any[] = await Promise.all(allPromises);
-
-    const wikiResult = results[allPromises.indexOf(wikiPromise)];
-    const ytResult = results[allPromises.indexOf(ytPromise)];
-
-    const searchResult =
-    {
-        gameData:results.slice(0, commPromises.length).flat(),
-        priceData:results[allPromises.indexOf(pcPromise)],
-        wikiData:wikiResult,
-        videoId:ytResult?.videoId
-    };
-
-    // await db.add(queryString, searchResult, userId);
-    sendResponse(response, searchResult);
-}
-
-
 async function parseSearch(queryString:string, userId:number, response:ServerResponse)
 {
     let searchResults:SearchResult|undefined = await db.getCachedQuery(queryString);
@@ -353,25 +320,12 @@ async function parseSearch(queryString:string, userId:number, response:ServerRes
         return;
     }
 
-/*    const communicators:BaseComm[] =
-    [
-        new TechnopolisComm(),
-        new OzoneComm(),
-        new BazarComm(),
-        new OlxComm()
-    ];
-
-    const commPromises:Promise<any>[] = communicators.map(comm =>
-    {
-        return comm.getData(queryString);
-    });*/
-
     const searchWords = Util.toSearchWords(queryString);
 
     const gameData = await db.getGames(searchWords);
 
     const pcPromise = new PriceChartingComm().getData(searchWords, queryString);
-    const wikiPromise = new WikiComm().getData(searchWords);
+    const wikiPromise = new WikiComm().getData(searchWords, queryString);
     const ytPromise = new YouTubeComm().getData(searchWords);
 
     const allPromises:Promise<any>[] = [pcPromise, wikiPromise, ytPromise];
@@ -389,7 +343,7 @@ async function parseSearch(queryString:string, userId:number, response:ServerRes
         videoId:ytResult?.videoId
     };
 
-    // await db.add(queryString, searchResult, userId);
+    await db.add(queryString, searchResult, userId);
     sendResponse(response, searchResult);
 }
 

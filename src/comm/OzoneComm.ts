@@ -17,7 +17,7 @@ export default class OzoneComm extends BaseComm
         const promises:Promise<GameData>[] = rawResults.items
             .filter((item:any) =>
             {
-                return Util.filterFullyContained(item.l, query);
+                return Util.isFullyContained(item.l, query);
             })
             .map((item:any) =>
             {

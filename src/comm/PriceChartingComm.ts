@@ -43,7 +43,7 @@ export default class PriceChartingComm
                     const filteredResults =
                         results.filter((result:GameData) =>
                         {
-                            return Util.filterFullyContained(result.name, queryString)
+                            return Util.isFullyContained(result.name, queryString)
                         });
                     resolve(filteredResults.slice(0,8));
                 })

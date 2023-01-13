@@ -24,7 +24,7 @@ export default class BazarComm extends BaseComm
                 const name = li.querySelector("div.title span.title").rawText;
                 if (name)
                 {
-                    return Util.filterFullyContained(Util.removeWhitespaces(name), query);
+                    return Util.isFullyContained(Util.removeWhitespaces(name), query);
                 }
                 return false;
             })

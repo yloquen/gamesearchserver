@@ -21,7 +21,7 @@ export default class TechnopolisComm extends BaseComm
             list?.filter((li:any) =>
             {
                 const name = li.querySelector(".modal-header")?.querySelector("strong")?.rawText || "";
-                return Util.filterFullyContained(name, query);
+                return Util.isFullyContained(name, query);
             })
             .map(li =>
             {

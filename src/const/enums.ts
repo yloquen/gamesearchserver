@@ -2,7 +2,8 @@ export enum E_ErrorType
 {
     LOGIN,
     REGISTER,
-    GENERIC
+    GENERIC,
+    DATABASE
 }
 
 export enum E_RegisterError
@@ -28,4 +29,9 @@ export enum E_GenericError
     NOT_LOGGED_IN,
     DATABASE,
     CRYPTO
+}
+
+export enum E_DatabaseError
+{
+    ADD_FAVORITE_ERROR
 }

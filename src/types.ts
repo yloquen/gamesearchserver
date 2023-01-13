@@ -16,8 +16,8 @@ export type NewGameData =
     price:number,
     provider:string,
     link:string,
-    img:string,
-    vendor_id:number,
+    img:string|null,
+    vendor_id:string,
     expires_at:string
 };
 
