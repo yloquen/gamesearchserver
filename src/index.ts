@@ -8,7 +8,7 @@ import YouTubeComm from "./comm/YouTubeComm";
 import BazarComm from "./comm/BazarComm";
 import DataBaseModule from "./DataBaseModule";
 import C_Config from "./C_Config";
-import {ErrorData, SearchResult} from "./types";
+import {ErrorData, SearchResult, SessionData} from "./types";
 import {IncomingMessage, ServerResponse} from "http";
 import {E_ErrorType, E_GenericError, E_LoginError, E_RegisterError} from "./const/enums";
 import {Buffer} from "buffer";
@@ -16,6 +16,7 @@ import {generateHS256Token, verifyToken} from "./JWTUtil";
 import OlxComm from "./comm/OlxComm";
 import OlxCrawler from "./crawlers/OlxCrawler";
 import TechnopolisCrawler from "./crawlers/TechnopolisCrawler";
+import SessionManager from "./SessionManager";
 
 
 const http = require('http');
@@ -26,39 +27,24 @@ console.log("Starting server at 8080");
 http.createServer(onRequest).listen(8080);
 
 const db = new DataBaseModule();
-const activeSessions:Record<number, any> = {};
 
+const sm = new SessionManager();
 
 // const jwToken = generateHS256Token({sub:1});
 // const result = verifyToken("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjF9.VH0PNb2_RIc5BYsGqFBqgyhIQ7g2oPyxg75PUWOF2fQ");
 // console.log(result);
 
 
-function sendResponse(response:ServerResponse, data:any)
+function sendResponse(req:IncomingMessage, response:ServerResponse, data:any)
 {
-    response.write(JSON.stringify(data));
-    response.end();
-}
-
-
-function parseCookies(req:IncomingMessage)
-{
-    const list:any = {};
-    const cookieHeader = req.headers?.cookie;
-    if (!cookieHeader) return list;
-
-    cookieHeader.split(`;`).forEach((cookie) =>
+    const resp =
     {
-        let [ name, ...rest] = cookie.split(`=`);
-        name = name?.trim();
-        const value = rest.join(`=`).trim();
-        if (name && value)
-        {
-            list[name] = decodeURIComponent(value);
-        }
-    });
+        data:data,
+        loggedIn:Boolean(sm.getUserSessionData(req))
+    };
 
-    return list;
+    response.write(JSON.stringify(resp));
+    response.end();
 }
 
 
@@ -94,10 +80,20 @@ async function onReqReceived(req:IncomingMessage, resp:ServerResponse, data:any 
     catch (e)
     {
         console.log("\n\nError:\n" + e);
-        sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.GENERAL}});
+        sendResponse(req, resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.GENERAL}});
     }
 }
 
+
+type MethodName =
+    "/search_history" |
+    "/set_favorite" |
+    "/favorites" |
+    "/login" |
+    "/search" |
+    "/verify" |
+    "/logout" |
+    "/register";
 
 
 async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any = undefined)
@@ -110,157 +106,153 @@ async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any
     const queryObject = parsedUrl.query;
 
     console.log(parsedUrl.pathname + " @ " + new Date().getTime());
+    console.log("Request data : " + JSON.stringify(data));
 
-    const cookies = parseCookies(req);
-    const sid = cookies.sid;
-    let userId = null;
-    if (sid && activeSessions[sid])
+    const sessionData = sm.getUserSessionData(req);
+    const sid = sm.getSID(req);
+    let userId = sessionData?.id;
+
+    const methodName:MethodName = parsedUrl.pathname;
+
+    const methodsRequiringLogin:MethodName[] =
+    [
+        "/search_history",
+        "/favorites",
+        "/set_favorite"
+    ];
+
+    if (!userId && methodsRequiringLogin.indexOf(methodName) !== -1)
     {
-        userId = activeSessions[sid].id;
+        sendResponse(req, resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.NOT_LOGGED_IN}});
     }
-
-    switch (parsedUrl.pathname)
+    else
     {
+        userId = userId!;
 
-        case "/login":
+        switch (methodName)
         {
-            if (userId !== null)
+            case "/login":
             {
-                sendResponse(resp, {email:activeSessions[sid].email});
-            }
-            else
-            {
-                const d:any[] = await db.getUserData(data.email);
-                if (d.length === 1)
+                if (sessionData)
                 {
-                    const hash = await Util.generatePassHash(data.pass, d[0].salt);
-                    if (d[0].passhash === hash)
+                    sendResponse(req, resp, {email:sessionData.email});
+                }
+                else
+                {
+                    const d:any[] = await db.getUserData(data.email);
+                    if (d.length === 1)
                     {
-                        const sid = crypto.randomBytes(32).toString('base64');
-                        activeSessions[sid] = { id:d[0].id, email:data.email };
-                        resp.setHeader("Set-Cookie", `sid=${sid}; Max-Age=3600; HttpOnly;`);
-                        sendResponse(resp, {email:data.email});
+                        const hash = await Util.generatePassHash(data.pass, d[0].salt);
+
+                        if (d[0].passhash === hash)
+                        {
+                            const sessionData = sm.createSession(resp, d[0]);
+                            sendResponse(req, resp, {email:data.email});
+                        }
+                        else
+                        {
+                            sendResponse(req, resp, {error:{type:E_ErrorType.LOGIN, id:E_LoginError.WRONG_PASSWORD}});
+                        }
                     }
                     else
                     {
-                        sendResponse(resp, {error:{type:E_ErrorType.LOGIN, id:E_LoginError.WRONG_PASSWORD}});
+                        sendResponse(req, resp, {type:E_ErrorType.LOGIN, id:E_LoginError.USER_NOT_FOUND});
+                    }
+                }
+
+                break;
+            }
+
+            case "/search_history":
+            {
+                sendResponse(req, resp, await db.findUserSearches(userId));
+                break;
+            }
+
+            case "/search":
+            {
+                if (queryObject.q)
+                {
+                    const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
+                    try
+                    {
+                        parseSearch(decodeURIComponent(queryString), userId, req, resp);
+                    }
+                    catch (e)
+                    {
+                        sendResponse(req, resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.GENERAL}});
                     }
                 }
                 else
                 {
-                    sendResponse(resp, {type:E_ErrorType.LOGIN, id:E_LoginError.USER_NOT_FOUND});
+                    sendResponse(req, resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.SEARCH_QUERY_NOT_PROVIDED}});
                 }
-            }
 
-            break;
-        }
-
-        case "/search_history":
-        {
-            if (!userId)
-            {
-                sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.NOT_LOGGED_IN}});
                 break;
             }
 
-            const result = await db.findUserSearches(userId);
-            sendResponse(resp, result);
-
-            break;
-        }
-
-        case "/search":
-        {
-            if (queryObject.q)
+            case "/set_favorite":
             {
-                const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
-                try
+                sendResponse(req, resp, await db.addFavorite(data.id, userId));
+                break;
+            }
+
+            case "/favorites":
+            {
+                sendResponse(req, resp, await db.getFavorites(userId));
+                break;
+            }
+
+            case "/verify":
+            {
+                if (queryObject.token)
                 {
-                    parseSearch(decodeURIComponent(queryString), userId, resp);
+                    db.verifyUser(queryObject.token);
                 }
-                catch (e)
+                break;
+            }
+
+            case "/logout":
+            {
+                sm.endSession(req);
+                sendResponse(req, resp, {success:true});
+                break;
+            }
+
+            case "/register":
+            {
+                if (!data.hasOwnProperty("email") || !data.hasOwnProperty("pass"))
                 {
-                    sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.GENERAL}});
+                    sendResponse(req, resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_DATA}});
                 }
-            }
-            else
-            {
-                sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.SEARCH_QUERY_NOT_PROVIDED}});
+                else if (!Util.validateEmail(data.email))
+                {
+                    sendResponse(req, resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_EMAIL}});
+                }
+                else if (!Util.validatePass(data.pass))
+                {
+                    sendResponse(req, resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_PASS}});
+                }
+                else
+                {
+                    const result = await createUser(data.email, data.pass);
+                    sendResponse(req, resp, result);
+                }
+
+                break;
             }
 
-            break;
+            default:
+            {
+                sendResponse(req, resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.UNKNOWN_METHOD}});
+                break;
+            }
+
         }
-
-
-        case "/favorite":
-        {
-            let result;
-            if (userId)
-            {
-                result = await db.addFavorite(data.id, userId);
-            }
-            else
-            {
-                result = {error:{type:E_ErrorType.GENERIC, id:E_GenericError.NOT_LOGGED_IN}};
-            }
-
-            sendResponse(resp, result);
-
-            break;
-        }
-
-
-        case "/verify":
-        {
-            if (queryObject.token)
-            {
-                db.verifyUser(queryObject.token);
-            }
-            break;
-        }
-
-        case "/logout":
-        {
-            if (sid && activeSessions[sid])
-            {
-                delete activeSessions[sid];
-            }
-
-            sendResponse(resp, {success:true});
-
-            break;
-        }
-
-        case "/register":
-        {
-            if (!data.hasOwnProperty("email") || !data.hasOwnProperty("pass"))
-            {
-                sendResponse(resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_DATA}});
-            }
-            else if (!Util.validateEmail(data.email))
-            {
-                sendResponse(resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_EMAIL}});
-            }
-            else if (!Util.validatePass(data.pass))
-            {
-                sendResponse(resp, {error:{type:E_ErrorType.REGISTER, id:E_RegisterError.INVALID_PASS}});
-            }
-            else
-            {
-                const result = await createUser(data.email, data.pass);
-                sendResponse(resp, result);
-            }
-
-            break;
-        }
-
-        default:
-        {
-            sendResponse(resp, {error:{type:E_ErrorType.GENERIC, id:E_GenericError.UNKNOWN_METHOD}});
-            break;
-        }
-
     }
+
+
+
 }
 
 
@@ -310,19 +302,19 @@ async function createUser(email:string, pass:string):Promise<any>
 }
 
 
-async function parseSearch(queryString:string, userId:number, response:ServerResponse)
+async function parseSearch(queryString:string, userId:number|undefined, req:IncomingMessage, response:ServerResponse)
 {
     let searchResults:SearchResult|undefined = await db.getCachedQuery(queryString);
 
     if (searchResults)
     {
-        sendResponse(response, searchResults);
+        sendResponse(req, response, searchResults);
         return;
     }
 
     const searchWords = Util.toSearchWords(queryString);
 
-    const gameData = await db.getGames(searchWords);
+    const gameData = await db.getGames(userId, searchWords);
 
     const pcPromise = new PriceChartingComm().getData(searchWords, queryString);
     const wikiPromise = new WikiComm().getData(searchWords, queryString);
@@ -344,7 +336,7 @@ async function parseSearch(queryString:string, userId:number, response:ServerRes
     };
 
     await db.add(queryString, searchResult, userId);
-    sendResponse(response, searchResult);
+    sendResponse(req, response, searchResult);
 }
 
 

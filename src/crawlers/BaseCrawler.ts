@@ -19,7 +19,7 @@ export default class BaseCrawler
 
     async runAndClean()
     {
-        const data = await this.db.executeQuery("SELECT vendor_id FROM crawl_gameresults WHERE provider = ?", [this.provider]);
+        const data = await this.db.executeQuery("SELECT vendor_id FROM crawl_gameresults WHERE provider = ?", [[this.provider]]);
         this.vendorIds = {};
         data.forEach((d:any) => { this.vendorIds![d.vendor_id] = 1});
 
@@ -34,7 +34,7 @@ export default class BaseCrawler
         }
 
         const q = "DELETE FROM crawl_gameresults WHERE vendor_id IN ?";
-        await this.db.executeQuery(q, [idsToDelete]);
+        await this.db.executeQuery(q, [[idsToDelete]]);
     }
 
 
@@ -78,7 +78,7 @@ export default class BaseCrawler
 
         if (gameValues.length > 0)
         {
-            await this.db.executeQuery("INSERT INTO crawl_gameresults VALUES ? ON DUPLICATE KEY UPDATE price = price;", gameValues);
+            await this.db.executeQuery("INSERT INTO crawl_gameresults VALUES ? ON DUPLICATE KEY UPDATE price = price;", [gameValues]);
         }
     }
 

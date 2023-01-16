@@ -44,3 +44,9 @@ export type ErrorData =
     type:number,
     id:number
 }
+
+export type SessionData =
+{
+    id:number,
+    email:string
+}

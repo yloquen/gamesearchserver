@@ -31,6 +31,10 @@ export default class DataBaseModule
                 console.log('error when connecting to db:', err);
                 setTimeout(() => { this.createConnection() }, 2000);
             }
+            else
+            {
+                console.log(`Connected to ${credentials.database} @ ${credentials.host}`);
+            }
         });
 
         connection!.on('error', (err:any) =>
@@ -40,7 +44,7 @@ export default class DataBaseModule
             if(err.code === 'PROTOCOL_CONNECTION_LOST')
             {
                 console.log("Connection lost, trying to reconnect");
-                this.createConnection();
+                setTimeout(() => { this.createConnection() }, 2000);
             }
             else
             {
@@ -54,8 +58,8 @@ export default class DataBaseModule
 
     getUserData(email:string):Promise<any>
     {
-        const q = `SELECT passhash, salt, id FROM user WHERE email = ?`;
-        return this.executeQuery(q, [email]).then((dbResponse:any[]) =>
+        const q = `SELECT passhash, salt, id, email FROM user WHERE email = ?`;
+        return this.executeQuery(q, [[email]]).then((dbResponse:any[]) =>
         {
             return dbResponse;
         });
@@ -79,12 +83,12 @@ export default class DataBaseModule
                         let q = "INSERT INTO user VALUES ?;";
                         let vals = [ null, email, hash, salt, 0];
 
-                        await this.executeQuery(q, [vals]);
+                        await this.executeQuery(q, [[vals]]);
 
                         q = "INSERT INTO verify VALUES (LAST_INSERT_ID(), ?);";
                         vals = [email, verifyToken];
 
-                        await this.executeQuery(q, vals);
+                        await this.executeQuery(q, [vals]);
 
                         this.connection.commit();
 
@@ -98,9 +102,6 @@ export default class DataBaseModule
                 }
             });
         });
-
-
-
     }
 
 
@@ -115,7 +116,7 @@ export default class DataBaseModule
         };
 
         let query = `SELECT id, search_date FROM searches WHERE query_string = ?`;
-        let dbResponse:any[] = await this.executeQuery(query, [queryString]);
+        let dbResponse:any[] = await this.executeQuery(query, [[queryString]]);
 
         if (dbResponse.length === 0)
         {
@@ -128,19 +129,19 @@ export default class DataBaseModule
         if (secondsSinceSearch > C_Config.CACHE_DURATION_SECONDS)
         {
             query = `DELETE FROM searches WHERE id = ?`;
-            await this.executeQuery(query, [searchId]);
+            await this.executeQuery(query, [[searchId]]);
 
             return;
         }
 
         query = `SELECT id, img, link, price, name, provider FROM crawl_gameresults WHERE search_id = ?;`;
-        responseData.gameData = await this.executeQuery(query, [searchId]);
+        responseData.gameData = await this.executeQuery(query, [[searchId]]);
 
         query = `SELECT link, price, name FROM priceresults WHERE search_id = ?;`;
-        responseData.priceData = await this.executeQuery(query, [searchId]);
+        responseData.priceData = await this.executeQuery(query, [[searchId]]);
 
         query = `SELECT img, text_info, link FROM wikiresults WHERE search_id = ?;`;
-        dbResponse = await this.executeQuery(query, [searchId]);
+        dbResponse = await this.executeQuery(query, [[[searchId]]]);
 
         responseData.wikiData =
         {
@@ -150,7 +151,7 @@ export default class DataBaseModule
         };
 
         query = `SELECT video_id FROM videoresults WHERE search_id = ?;`;
-        dbResponse = await this.executeQuery(query, [searchId]);
+        dbResponse = await this.executeQuery(query, [[searchId]]);
         responseData.videoId = dbResponse[0]?.video_id;
 
         return responseData;
@@ -158,7 +159,7 @@ export default class DataBaseModule
 
 
 
-    add(queryString:string, results:SearchResult, userId:number):Promise<any>
+    add(queryString:string, results:SearchResult, userId:number|undefined):Promise<any>
     {
         return new Promise<any>((resolve, reject) =>
         {
@@ -188,29 +189,29 @@ export default class DataBaseModule
     }
 
 
-    async saveGameData(queryString:string, results:SearchResult, userId:number)
+    async saveGameData(queryString:string, results:SearchResult, userId:number|undefined)
     {
         const searchesQuery = "INSERT INTO searches VALUES ?;";
-        const searchesResult = await this.executeQuery(searchesQuery, [[null, queryString, null, userId]]);
+        const searchesResult = await this.executeQuery(searchesQuery, [[[null, queryString, null, userId]]]);
 
         let searchId:number = searchesResult.insertId;
 
         const priceQuery = "INSERT INTO priceresults VALUES ?;";
         const priceValues = results.priceData.map(d => [null, searchId, d.link, d.name, d.price || null]);
-        await this.executeQuery(priceQuery, priceValues);
+        await this.executeQuery(priceQuery, [priceValues]);
 
         const q4 = "INSERT INTO wikiresults VALUES ?;";
-        const vals4 = [[
+        const vals4 = [[[
             null,
             searchId,
             results.wikiData.link,
             results.wikiData.imgURL,
             JSON.stringify(results.wikiData.textInfo)
-        ]];
+        ]]];
         await this.executeQuery(q4, vals4);
 
         const q5 = "INSERT INTO videoresults VALUES ?;";
-        const vals = [[null, searchId, results.videoId]];
+        const vals = [[[null, searchId, results.videoId]]];
         await this.executeQuery(q5, vals);
     }
 
@@ -227,7 +228,7 @@ export default class DataBaseModule
         {
             try
             {
-                this.connection.query(mysql.format(q, [values]), (error, results) =>
+                this.connection.query(mysql.format(q, values), (error, results) =>
                 {
                     if (error)
                     {
@@ -260,7 +261,7 @@ export default class DataBaseModule
         let result;
         try
         {
-            result = await this.executeQuery(q, [userId]);
+            result = await this.executeQuery(q, [[userId]]);
             result = result.map((r:any) => r.query_string)
         }
         catch (e)
@@ -272,39 +273,40 @@ export default class DataBaseModule
     }
 
 
-    getGames(searchWords:string[])
+    getGames(userId:number|undefined, searchWords:string[])
     {
         // const q = "SELECT id, img, link, price, name, provider FROM crawl_gameresults where MATCH(name) AGAINST(? IN BOOLEAN MODE)";
+        // const q = 'SELECT * FROM crawl_gameresults WHERE name LIKE ?';
 
-        const q = 'SELECT * FROM crawl_gameresults WHERE name LIKE ?';
-        return this.executeQuery(q, ["%" + searchWords.join("%") + "%"]);
+        const q = 'SELECT cg.*, f.id AS isFavorite FROM crawl_gameresults cg LEFT JOIN favorites f ON cg.id = f.prod_id AND f.user_id = ? WHERE cg.name LIKE ?';
+
+        return this.executeQuery(q, [userId, "%" + searchWords.join("%") + "%"]);
     }
 
 
     async addFavorite(prodId:any, userId:number)
     {
-
         if (isNaN(prodId))
         {
             return {error:{type:E_ErrorType.DATABASE, id:E_DatabaseError.ADD_FAVORITE_ERROR}};
         }
 
-        // try
-        {
+        let q = "SELECT name FROM crawl_gameresults WHERE id = ?;";
+        const res = await this.executeQuery(q, [[prodId]]);
 
-            let q = "SELECT name FROM crawl_gameresults WHERE id = ?;";
-            const res = await this.executeQuery(q, [prodId]);
-
-            q = "INSERT INTO favorites VALUES ?;";
-            let vals = [ null, userId, prodId, res[0]?.name || ""];
-            await this.executeQuery(q, [vals]);
-        }
-
-        // catch (e)
-        // {
-        //     return {error:{type:E_ErrorType.DATABASE, id:E_DatabaseError.ADD_FAVORITE_ERROR}};
-        // }
+        q = "INSERT INTO favorites VALUES ?;";
+        let vals = [ null, userId, prodId, res[0]?.name || ""];
+        await this.executeQuery(q, [[vals]]);
 
         return {success:true};
     }
+
+
+    async getFavorites(userId:number)
+    {
+        const q = "SELECT * from favorites f join crawl_gameresults cg on f.prod_id=cg.id where f.user_id = ?";
+        return await this.executeQuery(q, [[userId]]);
+    }
+
+
 }
