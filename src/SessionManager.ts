@@ -18,6 +18,7 @@ export default class
     {
         const sid = crypto.randomBytes(32).toString('base64');
         this.activeSessions[sid] = { id:userData.id, email:userData.email };
+        // resp.setHeader("Set-Cookie", `sid=${sid}; Max-Age=3600; HttpOnly; SameSite=None; Secure;`);
         resp.setHeader("Set-Cookie", `sid=${sid}; Max-Age=3600; HttpOnly;`);
 
         return this.activeSessions[sid];

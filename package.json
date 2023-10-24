@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node ./src/index.ts",
-    "crawlers": "ts-node ./src/crawlers.ts"
+    "crawlers": "ts-node ./src/crawlers.ts",
+    "build": "webpack --config webpack.config.js",
+    "deploy": "aws\\pscp -i aws\\LightsailDefaultKey-eu-central-1.ppk ./dist/*.* bitnami@35.156.32.98:test"
   },
   "repository": {
     "type": "git",
@@ -21,9 +23,11 @@
     "@types/mysql": "^2.15.20",
     "@types/node": "^16.11.3",
     "ts-node": "^10.3.1",
-    "typescript": "^4.4.4"
+    "typescript": "^4.4.4",
+    "webpack-cli": "^5.0.1"
   },
   "dependencies": {
+    "@types/webpack": "^5.28.0",
     "crypto-js": "^4.1.1",
     "follow-redirects": "^1.15.2",
     "html-entities": "^2.3.2",
@@ -31,6 +35,8 @@
     "node-fetch": "^3.0.0",
     "node-html-parser": "^5.0.0",
     "nodemailer": "^6.8.0",
-    "sharp": "^0.29.2"
+    "sharp": "^0.29.2",
+    "webpack": "^5.75.0",
+    "ts-loader": "^9.4.2"
   }
 }

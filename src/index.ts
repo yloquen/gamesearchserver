@@ -23,6 +23,7 @@ const http = require('http');
 const url = require('url');
 const crypto = require('crypto');
 
+console.log("Running in environment " + process.env.NODE_ENV);
 console.log("Starting server at 8080");
 http.createServer(onRequest).listen(8080);
 
@@ -99,7 +100,7 @@ type MethodName =
 async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any = undefined)
 {
     resp.setHeader('Content-Type', 'application/json');
-    resp.setHeader('Access-Control-Allow-Origin', 'http://192.168.0.152:8081');
+    resp.setHeader('Access-Control-Allow-Origin', C_Config.BASE_WEB_URL);
     resp.setHeader('Access-Control-Allow-Credentials', 'true');
 
     const parsedUrl = url.parse(req.url, true);
@@ -112,7 +113,7 @@ async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any
     const sid = sm.getSID(req);
     let userId = sessionData?.id;
 
-    const methodName:MethodName = parsedUrl.pathname;
+    let methodName:MethodName = parsedUrl.pathname;
 
     const methodsRequiringLogin:MethodName[] =
     [
@@ -128,6 +129,11 @@ async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any
     else
     {
         userId = userId!;
+
+        if (process.env.NODE_ENV === "production")
+        {
+            methodName = methodName.slice(4) as MethodName;
+        }
 
         switch (methodName)
         {
@@ -176,7 +182,7 @@ async function processRequest(req:IncomingMessage, resp:ServerResponse, data:any
                     const queryString = queryObject.q.toLowerCase().slice(0, C_Config.MAX_SEARCH_STRING_SIZE);
                     try
                     {
-                        parseSearch(decodeURIComponent(queryString), userId, req, resp);
+                        await parseSearch(decodeURIComponent(queryString), userId, req, resp);
                     }
                     catch (e)
                     {
@@ -275,11 +281,8 @@ async function createUser(email:string, pass:string):Promise<any>
 
                 const verifyToken = crypto.randomBytes(64).toString('base64');
                 await db.createUser(email, passHash, salt, verifyToken);
-
-                const url = "http://192.168.0.152/verify?token=" + verifyToken;
-
+                const url = C_Config.BASE_WEB_URL + "/verify?token=" + verifyToken;
                 const emailText = "Copy and paste this link in the browser address bar:\n" + url;
-
                 await Util.sendEmail(email, "Verify your GameSleuth account", emailText);
                 result = {success:true};
             }
@@ -335,7 +338,7 @@ async function parseSearch(queryString:string, userId:number|undefined, req:Inco
         videoId:ytResult?.videoId
     };
 
-    await db.add(queryString, searchResult, userId);
+    await db.addSearchResult(queryString, searchResult, userId);
     sendResponse(req, response, searchResult);
 }
 

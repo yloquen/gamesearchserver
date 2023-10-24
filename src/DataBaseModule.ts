@@ -1,4 +1,4 @@
-import {credentials} from "./cred";
+import {credentials, aws_cred} from "./cred";
 import {GameData, SearchResult} from "./types";
 import {Connection, MysqlError, OkPacket} from "mysql";
 import C_Config from "./C_Config";
@@ -22,7 +22,8 @@ export default class DataBaseModule
 
     createConnection()
     {
-        const connection = mysql.createConnection(credentials);
+        const cred = process.env.NODE_ENV === 'production' ? aws_cred : credentials;
+        const connection = mysql.createConnection(cred);
 
         connection.connect((err:any) =>
         {
@@ -33,7 +34,7 @@ export default class DataBaseModule
             }
             else
             {
-                console.log(`Connected to ${credentials.database} @ ${credentials.host}`);
+                console.log(`Connected to ${cred.database} @ ${cred.host}`);
             }
         });
 
@@ -159,16 +160,16 @@ export default class DataBaseModule
 
 
 
-    add(queryString:string, results:SearchResult, userId:number|undefined):Promise<any>
+    async addSearchResult(queryString:string, results:SearchResult, userId:number|undefined):Promise<any>
     {
         return new Promise<any>((resolve, reject) =>
         {
-            this.connection.beginTransaction(async (err:MysqlError) =>
+            this.connection.beginTransaction(async (mySqlErr:MysqlError) =>
             {
-                if (err)
+                if (mySqlErr)
                 {
                     this.connection.rollback();
-                    reject(err);
+                    reject(mySqlErr);
                 }
                 else
                 {
@@ -196,9 +197,12 @@ export default class DataBaseModule
 
         let searchId:number = searchesResult.insertId;
 
-        const priceQuery = "INSERT INTO priceresults VALUES ?;";
-        const priceValues = results.priceData.map(d => [null, searchId, d.link, d.name, d.price || null]);
-        await this.executeQuery(priceQuery, [priceValues]);
+        if (results.priceData.length > 0)
+        {
+            const priceQuery = "INSERT INTO priceresults VALUES ?;";
+            const priceValues = results.priceData.map(d => [null, searchId, d.link, d.name, d.price || null]);
+            await this.executeQuery(priceQuery, [priceValues]);
+        }
 
         const q4 = "INSERT INTO wikiresults VALUES ?;";
         const vals4 = [[[

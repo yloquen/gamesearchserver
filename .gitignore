@@ -16,3 +16,8 @@ build
 static/player*.html
 static/index.html
 static/getDynamicAssetList.php
+
+cred.ts
+
+aws
+*.ppk
